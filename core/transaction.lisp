@@ -1,5 +1,7 @@
 (uiop:define-package :bp/core/transaction
-    (:use :cl :bp/core/encoding)
+    (:use :cl
+          :bp/core/encoding
+          :bp/crypto/hash)
   (:export
    ;; Transaction API:
    #:tx
@@ -34,11 +36,11 @@
          (num-outputs (length outputs))
          (locktime (tx-locktime tx)))
     (write-int version stream :size 4 :byte-order :little)
-    (write-varint stream num-inputs)
+    (write-varint num-inputs stream)
     (loop
        :for i :below num-inputs
        :do (serialize (aref inputs i) stream))
-    (write-varint stream num-outputs)
+    (write-varint num-outputs stream)
     (loop
        :for i :below num-outputs
        :do (serialize (aref outputs i) stream))
@@ -66,6 +68,24 @@
      :inputs inputs
      :outputs outputs
      :locktime locktime)))
+
+(defun txid (tx)
+  "Raw transaction ID is a double SHA256 of its binary serialization."
+  (hash256
+   (ironclad:with-octet-output-stream (stream)
+     (serialize tx stream))))
+
+(defun tx-id (tx)
+  "Return hex-encoded little-endian representation of raw transaction ID."
+  (to-hex (reverse (txid tx))))
+
+(defmethod print-object ((tx tx) stream)
+  (print-unreadable-object (tx stream :type t)
+    (format stream "~&  id:       ~a~%" (tx-id       tx))
+    (format stream "~&  version:  ~a~%" (tx-version  tx))
+    (format stream "~&  inputs:   ~a~%" (length      (tx-inputs tx)))
+    (format stream "~&  outputs:  ~a~%" (length      (tx-outputs tx)))
+    (format stream "~&  locktime: ~a"   (tx-locktime tx))))
 
 (defstruct txin
   previous-tx-id
@@ -95,6 +115,13 @@
      :script-sig script-sig
      :sequence sequence)))
 
+(defmethod print-object ((txin txin) stream)
+  (print-unreadable-object (txin stream :type t)
+    (format stream "~&  previous-tx-id:    ~a~%" (to-hex (reverse (txin-previous-tx-id txin))))
+    (format stream "~&  previous-tx-index: ~a~%" (txin-previous-tx-index txin))
+    (format stream "~&  script-sig:        ~a~%" (to-hex (txin-script-sig txin)))
+    (format stream "~&  sequence:          ~a"   (txin-sequence txin))))
+
 (defstruct txout
   amount
   script-pubkey)
@@ -112,6 +139,11 @@
     (make-txout
      :amount amount
      :script-pubkey script-pubkey)))
+
+(defmethod print-object ((txout txout) stream)
+  (print-unreadable-object (txout stream :type t)
+    (format stream "~&  amount:        ~a~%" (txout-amount txout))
+    (format stream "~&  script-pubkey: ~a"   (to-hex (txout-script-pubkey txout)))))
 
 #+test
 (defvar *test-transaction*

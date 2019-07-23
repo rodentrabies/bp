@@ -1,8 +1,12 @@
 (uiop:define-package :bp/core/encoding
     (:use :cl :ironclad)
   (:export
+   ;; Serialization API:
    #:serialize
    #:deserialize
+   #:encode
+   #:decode
+   ;; Utilities:
    #:to-hex
    #:from-hex
    #:read-bytes
@@ -21,14 +25,24 @@
   (:documentation "Deserialize bytes from the STREAM into an instance
   of the class named ENTITY-CLASS."))
 
-(defun to-hex (entity)
-  (ironclad:with-octet-output-stream (stream)
-    (serialize entity stream)
-    (ironclad:byte-array-to-hex-string (ironclad:get-output-stream-octets stream))))
+(defun encode (entity)
+  "Encode Bitcoin Protocol ENTITY into a hex string."
+  (ironclad:byte-array-to-hex-string
+   (ironclad:with-octet-output-stream (stream)
+     (serialize entity stream))))
 
-(defun from-hex (entity-class string)
+(defun decode (entity-class string)
+  "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS from hex STRING."
   (ironclad:with-octet-input-stream (stream (ironclad:hex-string-to-byte-array string))
     (deserialize entity-class stream)))
+
+(defun to-hex (bytes)
+  "Shortcut to avoid using long symbol IRONCLAD:BYTE-ARRAY-TO-HEX-STRING."
+  (ironclad:byte-array-to-hex-string bytes))
+
+(defun from-hex (string)
+  "Shortcut to avoid using long symbol IRONCLAD:HEX-STRING-TO-BYTE-ARRAY."
+  (ironclad:hex-string-to-byte-array string))
 
 (defun read-bytes (stream size)
   (let ((bytes (make-array size :element-type '(unsigned-byte 8))))
@@ -39,20 +53,22 @@
   (write-sequence bytes stream :start 0 :end size))
 
 (defun read-int (stream &key size byte-order)
-  (let ((bytes (read-bytes stream size)))
-    (ironclad:octets-to-integer
-     (ecase byte-order
-       (:big    bytes)
-       (:little (reverse bytes))))))
+  (let ((big-endian-p
+         (ecase byte-order
+           (:big    t)
+           (:little nil)))
+        (bytes
+         (read-bytes stream size)))
+    (ironclad:octets-to-integer bytes :n-bits (* 8 size) :big-endian big-endian-p)))
 
 (defun write-int (i stream &key size byte-order)
-  (let ((bytes (ironclad:integer-to-octets i)))
-    (write-bytes
-     (ecase byte-order
-       (:big    bytes)
-       (:little (reverse bytes)))
-     stream
-     size)))
+  (let* ((big-endian-p
+          (ecase byte-order
+            (:big    t)
+            (:little nil)))
+         (bytes
+          (ironclad:integer-to-octets i :n-bits (* 8 size) :big-endian big-endian-p)))
+    (write-bytes bytes stream size)))
 
 (defun read-varint (stream)
   (let ((tag (read-byte stream)))
