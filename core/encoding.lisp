@@ -1,5 +1,4 @@
-(uiop:define-package :bp/core/encoding
-    (:use :cl :ironclad)
+(uiop:define-package :bp/core/encoding (:use :cl :ironclad)
   (:export
    ;; Serialization API:
    #:serialize

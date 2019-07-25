@@ -1,5 +1,4 @@
-(uiop:define-package :bp/core/block
-    (:use :cl)
+(uiop:define-package :bp/core/block (:use :cl)
   (:export
    #:cblock))
 
