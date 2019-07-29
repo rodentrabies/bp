@@ -122,6 +122,72 @@ otherwise."
               (opcode symbolic-command)))))
     (make-script :commands (map 'vector #'command symbolic-commands))))
 
+(defstruct (script-state (:conc-name @))
+  commands
+  sighash
+  stack
+  altstack)
+
+(defun decode-integer (bytes)
+  (if (not (zerop (length bytes)))
+      (let ((rbytes (nreverse bytes)))
+        (multiple-value-bind (negative-p integer)
+            (if (zerop (logand (aref rbytes 0) #x80))
+                (values nil (aref rbytes 0))
+                (values t (logand (aref rbytes 0) #x7f)))
+         (loop
+            :for i :from 1 :below (length rbytes)
+            :do (setf integer (+ (ash integer 8) (aref rbytes i)))
+            :finally (setf integer (if negative-p (- integer) integer)))
+         integer))
+      0))
+
+(defun encode-integer (integer)
+  (if (not (zerop integer))
+      (let* ((negative-p (< integer 0))
+             (ainteger (abs integer))
+             (num-bytes (ceiling (integer-length ainteger) 8))
+             (bytes
+              (make-array (1+ num-bytes)
+                          :element-type '(unsigned-byte 8)
+                          :fill-pointer 0)))
+        (loop
+           :for i :below num-bytes
+           :for byte :from 0 :by 8
+           :do (vector-push (ldb (byte 8 byte) ainteger) bytes)
+           :finally (if (zerop (logand (aref bytes (1- i)) #x80))
+                        (when negative-p
+                          (setf (aref bytes (1- i))
+                                (logior (aref bytes (1- i)) #x80)))
+                        (if negative-p
+                            (vector-push #x80 bytes)
+                            (vector-push #x00 bytes))))
+        bytes)
+      #()))
+
+(defun execute (script &optional sighash)
+  (let ((state (make-script-state
+                :commands (coerce (script-commands script) 'list)
+                :sighash sighash
+                :stack nil
+                :altstack nil)))
+    (loop
+       :for command := (pop (@commands state))
+       :while command
+       :for op := (if (consp command) (car command) command)
+       :for op-function := (nth-value 1 (opcode op))
+       :if (<= (opcode :op_push2) op (opcode :op_pushdata4))
+       :do
+         (push (cdr command) (@stack state))
+       :else
+       :do
+         (unless (funcall op-function state)
+           (warn "Bad operation: 0x~2,'0x (~{~a~^/~})." op (opcode op))
+           (return-from execute nil)))
+    (values (and (not (zerop (length (@stack state))))
+                 (not (equalp (first (@stack state)) #())))
+            (mapcar #'decode-integer (@stack state)))))
+
 ;;;-----------------------------------------------------------------------------
 ;;; Operation definitions
 ;;; Source: https://en.bitcoin.it/wiki/Script
@@ -131,7 +197,12 @@ otherwise."
 (defmacro define-opcode (op-name op-code op-hex-code (&rest args) &body body)
   (declare (ignorable op-hex-code))
   `(progn
-     (defun ,op-name ,args ,@body)
+     (defun ,op-name ,args
+       ,doc
+       ,@(or body
+             `((declare (ignore state))
+               (warn "Operation ~a not implemented." ',op-name)
+               nil)))
      (register-opcode ,op-code ',op-name (symbol-function ',op-name))))
 
 (defmacro define-opcode-alias (new-op-name old-op-name)
@@ -139,11 +210,15 @@ otherwise."
     (opcode (intern (string ',old-op-name) :keyword))
     ',new-op-name))
 
-(defmacro define-disabled-opcode (op-name op-code op-hex-code (&rest args)
-                                  &body body)
+(defmacro define-disabled-opcode (op-name op-code op-hex-code
+                                  (&rest args)
+                                  &body (doc &rest body))
   (declare (ignore body))
   `(define-opcode ,op-name ,op-code ,op-hex-code (,@args)
-     (error "Opcode is disabled.")))
+     ,doc
+     (declare (ignore state))
+     (warn "Opcode is disabled.")
+     nil))
 
 (defmacro define-opcode-range ((op-name-prefix op-name-start op-name-end)
                                (op-code-start op-code-end)
