@@ -52,9 +52,9 @@ otherwise."
                :else
                :if (and (consp op) (<= (opcode :op_pushdata1) (car op) (opcode :op_pushdata4)))
                :do
-                 (let ((int-size (cond ((= (car op) (opcode :op_pushdata1)) 2)
-                                       ((= (car op) (opcode :op_pushdata2)) 4)
-                                       ((= (car op) (opcode :op_pushdata4)) 8))))
+                 (let ((int-size (cond ((= (car op) (opcode :op_pushdata1)) 1)
+                                       ((= (car op) (opcode :op_pushdata2)) 2)
+                                       ((= (car op) (opcode :op_pushdata4)) 4))))
                    (write-byte (car op) script-stream)
                    (write-int (length (cdr op)) script-stream :size int-size :byte-order :little)
                    (write-bytes (cdr op) script-stream (length (cdr op))))
@@ -78,9 +78,9 @@ otherwise."
        :else
        :if (<= (opcode :op_pushdata1) op (opcode :op_pushdata4))
        :do
-         (let* ((int-size (cond ((= op (opcode :op_pushdata1)) 2)
-                                ((= op (opcode :op_pushdata2)) 4)
-                                ((= op (opcode :op_pushdata4)) 8)))
+         (let* ((int-size (cond ((= op (opcode :op_pushdata1)) 1)
+                                ((= op (opcode :op_pushdata2)) 2)
+                                ((= op (opcode :op_pushdata4)) 4)))
                 (data-size (read-int stream :size int-size :byte-order :little)))
            (push (cons op (read-bytes stream data-size)) commands)
            (incf i (+ int-size data-size)))
@@ -99,6 +99,28 @@ otherwise."
      (format stream "<~{~a~^ ~}>"
              (map 'list #'print-command (script-commands script))))))
 
+(defun script (&rest symbolic-commands)
+  "Convert Lisp representation of script sequence into a SCRIPT object."
+  (flet ((command (symbolic-command)
+           (etypecase symbolic-command
+             (string
+              (let* ((data (from-hex symbolic-command))
+                     (data-length (length data)))
+                (cons (cond ((> data-length 520)
+                             (error "Data element is too long."))
+                            ((< data-length 76)
+                             data-length)
+                            ((< (integer-length data-length) 8)
+                             (opcode :op_pushdata1))
+                            ((< (integer-length data-length) 16)
+                             (opcode :op_pushdata2))
+                            #+ignore
+                            ((< (integer-length data-length) 32)
+                             (opcode :op_pushdata4)))
+                      data)))
+             (keyword
+              (opcode symbolic-command)))))
+    (make-script :commands (map 'vector #'command symbolic-commands))))
 
 ;;;-----------------------------------------------------------------------------
 ;;; Operation definitions
