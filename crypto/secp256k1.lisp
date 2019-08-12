@@ -1,4 +1,5 @@
 (uiop:define-package :bp/crypto/secp256k1 (:use :cl :cffi :ironclad)
+  (:use :bp/crypto/random)
   (:nicknames :secp256k1)
   (:export
    ;; Signature API
@@ -17,8 +18,10 @@
    #:ecdsa-signature-parse-der
    #:ecdsa-signature-serialize-der
    #:ecdsa-signature-normalize
-   ;; Context utilities
-   #:context-randomize))
+   ;; Context
+   #:context-create-none
+   #:context-create-verify
+   #:context-create-sign))
 
 (in-package :bp/crypto/secp256k1)
 
@@ -145,9 +148,52 @@
 (defcfun "secp256k1_context_destroy" :void
   (ctx :pointer))
 
-(defvar *context-none*   (secp256k1-context-create +secp256k1-context-none+))
-(defvar *context-sign*   (secp256k1-context-create +secp256k1-context-sign+))
-(defvar *context-verify* (secp256k1-context-create +secp256k1-context-verify+))
+;; Updates the context randomization to protect against side-channel leakage.
+;; Returns: 1: randomization successfully updated or nothing to randomize
+;;          0: error
+;; Args:    ctx:       pointer to a context object (cannot be NULL)
+;; In:      seed32:    pointer to a 32-byte random seed (NULL resets to initial state)
+;;
+;; While secp256k1 code is written to be constant-time no matter what secret
+;; values are, it's possible that a future compiler may output code which isn't,
+;; and also that the CPU may not emit the same radio frequencies or draw the same
+;; amount power for all values.
+;;
+;; This function provides a seed which is combined into the blinding value: that
+;; blinding value is added before each multiplication (and removed afterwards) so
+;; that it does not affect function results, but shields against attacks which
+;; rely on any input-dependent behaviour.
+;;
+;; This function has currently an effect only on contexts initialized for signing
+;; because randomization is currently used only for signing. However, this is not
+;; guaranteed and may change in the future. It is safe to call this function on
+;; contexts not initialized for signing; then it will have no effect and return 1.
+;;
+;; You should call this after secp256k1_context_create or
+;; secp256k1_context_clone, and may call this repeatedly afterwards.
+(defcfun "secp256k1_context_randomize" :int
+  (ctx :pointer) ;; secp256k1_context*
+  (seed32 (:pointer :unsigned-char)))
+
+(defun context-create-none ()
+  (secp256k1-context-create +secp256k1-context-none+))
+
+(defun context-create-verify ()
+  (secp256k1-context-create +secp256k1-context-verify+))
+
+(defun context-create-sign ()
+  (let ((ctx (secp256k1-context-create +secp256k1-context-sign+))
+        (seed32 (random-bytes 32)))
+    (with-foreign-objects
+        ((cseed32 :unsigned-char 32))
+      (bytes-to-foreign seed32 cseed32 32)
+      (assert (not (zerop (secp256k1-context-randomize ctx cseed32)))
+              () "Sign context randomization error.")
+      ctx)))
+
+(defvar *context-none*   (context-create-none))
+(defvar *context-verify* (context-create-verify))
+(defvar *context-sign*   (context-create-sign))
 
 ;; Create a secp256k1 scratch space object.
 ;;
@@ -578,40 +624,6 @@
   (ctx :pointer) ;; secp256k1_context*
   (pubkey (:pointer (:struct secp256k1-pubkey)))
   (tweak (:pointer :unsigned-char)))
-
-;; Updates the context randomization to protect against side-channel leakage.
-;; Returns: 1: randomization successfully updated or nothing to randomize
-;;          0: error
-;; Args:    ctx:       pointer to a context object (cannot be NULL)
-;; In:      seed32:    pointer to a 32-byte random seed (NULL resets to initial state)
-;; 
-;; While secp256k1 code is written to be constant-time no matter what secret
-;; values are, it's possible that a future compiler may output code which isn't,
-;; and also that the CPU may not emit the same radio frequencies or draw the same
-;; amount power for all values.
-;; 
-;; This function provides a seed which is combined into the blinding value: that
-;; blinding value is added before each multiplication (and removed afterwards) so
-;; that it does not affect function results, but shields against attacks which
-;; rely on any input-dependent behaviour.
-;; 
-;; This function has currently an effect only on contexts initialized for signing
-;; because randomization is currently used only for signing. However, this is not
-;; guaranteed and may change in the future. It is safe to call this function on
-;; contexts not initialized for signing; then it will have no effect and return 1.
-;; 
-;; You should call this after secp256k1_context_create or
-;; secp256k1_context_clone, and may call this repeatedly afterwards.
-(defcfun "secp256k1_context_randomize" :int
-  (ctx :pointer) ;; secp256k1_context*
-  (seed32 (:pointer :unsigned-char)))
-
-(defun context-randomize (seed32)
-  (with-foreign-objects
-      ((cseed32 :unsigned-char 32))
-    (bytes-to-foreign seed32 cseed32 32)
-    (unless (zerop (secp256k1-context-randomize *context-sign* cseed32))
-      t)))
 
 ;; Add a number of public keys together.
 ;; Returns: 1: the sum of the public keys is valid.
