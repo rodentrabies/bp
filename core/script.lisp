@@ -804,10 +804,20 @@ the data after the most recently-executed OP_CODESEPARATOR.")
   "The entire transaction's outputs, inputs, and script (from the most
 recently-executed OP_CODESEPARATOR to the end) are hashed. The
 signature used by OP_CHECKSIG must be a valid signature for this hash
-and public key. If it is, 1 is returned, 0 otherwise.")
+and public key. If it is, 1 is returned, 0 otherwise."
+  (when (>= (length (@stack state)) 2)
+    (let ((pubkey (parse-pubkey (pop (@stack state))))
+          (signature (parse-signature (pop (@stack state)))))
+      (push (if (verify-signature pubkey (@sighash state) signature)
+                (encode-integer 1)
+                (encode-integer 0))
+            (@stack state))
+      t)))
 
 (define-opcode op_checksigverify 173 #xad (state)
-  "Same as OP_CHECKSIG, but OP_VERIFY is executed afterward.")
+  "Same as OP_CHECKSIG, but OP_VERIFY is executed afterward."
+  (when (op_checksig state)
+    (op_verify state)))
 
 (define-opcode op_checkmultisig 174 #xae (state)
   "Compares the first signature against each public key until it finds

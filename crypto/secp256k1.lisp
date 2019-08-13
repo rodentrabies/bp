@@ -21,7 +21,19 @@
    ;; Context
    #:context-create-none
    #:context-create-verify
-   #:context-create-sign))
+   #:context-create-sign
+   ;; High-level API
+   #:key
+   #:make-key
+   #:pubkey
+   #:make-pubkey
+   #:parse-pubkey
+   #:serialize-pubkey
+   #:signature
+   #:make-signature
+   #:verify-signature
+   #:parse-signature
+   #:serialize-signature))
 
 (in-package :bp/crypto/secp256k1)
 
@@ -638,3 +650,51 @@
   (out (:pointer (:struct secp256k1-pubkey)))
   (ins (:pointer (:pointer (:struct secp256k1-pubkey))))
   (n size-t))
+
+
+
+;;;-----------------------------------------------------------------------------
+;;; High-level API
+
+(defstruct (key (:constructor %make-key))
+  bytes)
+
+(defstruct (pubkey (:constructor %make-pubkey))
+  bytes)
+
+(defstruct (signature (:constructor %make-signature))
+  bytes)
+
+(defun make-key ()
+  (%make-key :bytes (random-bytes 32)))
+
+(defun make-pubkey (key)
+  (%make-pubkey :bytes (ec-pubkey-create (key-bytes key))))
+
+(defun parse-pubkey (bytes)
+  (%make-pubkey :bytes (ec-pubkey-parse bytes)))
+
+(defun serialize-pubkey (key)
+  (ec-pubkey-serialize (key-bytes key)))
+
+(defun parse-signature (bytes &key (type :compact))
+  (%make-signature
+   :bytes
+   (ecase type
+     (:compact
+      (ecdsa-signature-parse-compact bytes))
+     (:der
+      (ecdsa-signature-parse-der bytes)))))
+
+(defun serialize-signature (signature &key (type :compact))
+  (ecase type
+    (:compact
+     (ecdsa-signature-serialize-compact (signature-bytes signature)))
+    (:der
+     (ecdsa-signature-serialize-der (signature-bytes signature)))))
+
+(defun make-signature (key hash)
+  (%make-signature :bytes (ecdsa-sign hash (key-bytes key))))
+
+(defun verify-signature (pubkey hash signature)
+  (ecdsa-verify (signature-bytes signature) hash (pubkey-bytes pubkey)))
