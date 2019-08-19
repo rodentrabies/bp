@@ -502,7 +502,7 @@
        (cseckey :unsigned-char 32))
     (bytes-to-foreign msg32 cmsg32 32)
     (bytes-to-foreign seckey cseckey 32)
-    (unless (zerop (secp256k1-ecdsa-sign *context-sign* csignature cseckey cmsg32
+    (unless (zerop (secp256k1-ecdsa-sign *context-sign* csignature cmsg32 cseckey
                                          (null-pointer) (null-pointer)))
       (bytes-from-foreign nil csignature 64))))
 
