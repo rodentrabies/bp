@@ -6,4 +6,4 @@
   :class :package-inferred-system
   :pathname #P"./"
 
-  :depends-on (:cffi :ironclad :bp/core/all :bp/crypto/all))
+  :depends-on (:cffi :aserve :jsown :ironclad :bp/core/all :bp/crypto/all))

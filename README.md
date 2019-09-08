@@ -4,9 +4,26 @@ This is a Common Lisp implementation of the various components of the
 Bitcoin Protocol. The serialization/deserialization utils may be used
 for reading the block data both from peers and from local database on
 disk. The cryptographic utilities are aggregated from FFI bindings to
-the [secp256k1] and [ironclad].
+the [secp256k1] and [ironclad]. HTTP client code uses [aserve], while
+and JSON handling is done with [jsown] package.
 
 ## Interface
+
+Functions `bp:get-block-hash`, `bp:get-block` and `bp:get-transaction`
+allow to pull chain data from any external supplier specified with the
+`bp:with-chain-supplier` macro:
+
+``` cl
+CL-USER> (bp:with-chain-supplier (:url      "http://localhost:8332"
+                                  :username "btcuser"
+                                  :password "btcpassword")
+           (bp:get-transaction "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098"))
+#<BP/CORE/TRANSACTION:TX 0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098>
+```
+
+Under the hood, these operations call corresponding generic functions
+`bp:chain-get-{block-hash,block,transaction}` which take the supplier
+object as an explicit first argument.
 
 Functions `bp:deserialize` and `bp:serialize` can be used to read and
 write any Bitcoin entity from and to any octet stream respectively:
@@ -36,3 +53,5 @@ CL-USER> (bp:encode *)
 
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [ironclad]: https://github.com/sharplispers/ironclad
+[aserve]: https://sourceforge.net/projects/portableaserve
+[jsown]: https://github.com/madnificent/jsown
