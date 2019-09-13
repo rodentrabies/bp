@@ -8,7 +8,9 @@
    #:tx
    #:tx-version
    #:tx-inputs
+   #:tx-input
    #:tx-outputs
+   #:tx-output
    #:tx-locktime
    ;; Transaction input API:
    #:txin
@@ -79,6 +81,12 @@
 (defun tx-id (tx)
   "Return hex-encoded little-endian representation of raw transaction ID."
   (to-hex (reverse (txid tx))))
+
+(defun tx-output (tx index)
+  (aref (tx-outputs tx) index))
+
+(defun tx-input (tx index)
+  (aref (tx-inputs tx) index))
 
 (defmethod print-object ((tx tx) stream)
   (print-unreadable-object (tx stream :type t)

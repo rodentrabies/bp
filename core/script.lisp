@@ -5,7 +5,9 @@
    :bp/crypto/secp256k1)
   (:export
    #:script
-   #:script-commands))
+   #:make-script
+   #:script-commands
+   #:execute-script))
 
 (in-package :bp/core/script)
 
@@ -165,7 +167,7 @@ otherwise."
         bytes)
       #()))
 
-(defun execute (script &optional sighash)
+(defun execute-script (script &optional sighash)
   (let ((state (make-script-state
                 :commands (coerce (script-commands script) 'list)
                 :sighash sighash
@@ -183,7 +185,7 @@ otherwise."
        :do
          (unless (funcall op-function state)
            (warn "Bad operation: 0x~2,'0x (~{~a~^/~})." op (opcode op))
-           (return-from execute nil)))
+           (return-from execute-script nil)))
     (values (and (not (zerop (length (@stack state))))
                  (not (equalp (first (@stack state)) #())))
             (mapcar #'decode-integer (@stack state)))))

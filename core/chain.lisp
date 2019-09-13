@@ -1,5 +1,5 @@
 (uiop:define-package :bp/core/chain (:use :cl)
-  (:import-from :net.aserve.client)
+  ;; (:import-from :net.aserve.client)
   (:import-from :jsown)
   (:use :bp/core/block
         :bp/core/transaction
@@ -12,6 +12,8 @@
    #:get-block-hash
    #:get-block
    #:get-transaction))
+
+(require :aserve)
 
 (in-package :bp/core/chain)
 
@@ -74,7 +76,7 @@
 (defmethod chain-get-block ((supplier node-connection) hash)
   ;; Second argument (0) tells Bitcoin RPC handler to return raw
   ;; hex-encoded block.
-  (decode 'cblock (do-simple-rpc-call supplier "getblock" hash 0)))
+  (decode 'block-header (do-simple-rpc-call supplier "getblock" hash 0)))
 
 (defmethod chain-get-transaction ((supplier node-connection) id)
   (decode 'tx (do-simple-rpc-call supplier "getrawtransaction" id)))
