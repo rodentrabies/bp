@@ -76,10 +76,13 @@
 (defmethod chain-get-block ((supplier node-connection) hash)
   ;; Second argument (0) tells Bitcoin RPC handler to return raw
   ;; hex-encoded block.
-  (decode 'block-header (do-simple-rpc-call supplier "getblock" hash 0)))
+  (let ((hash (if (stringp hash) hash (to-hex (reverse hash)))))
+    (decode 'block-header (do-simple-rpc-call supplier "getblock" hash 0))))
 
 (defmethod chain-get-transaction ((supplier node-connection) id)
-  (decode 'tx (do-simple-rpc-call supplier "getrawtransaction" id)))
+  (let ((id (if (stringp id) id (to-hex (reverse id)))))
+   (decode 'tx (do-simple-rpc-call supplier "getrawtransaction" id))))
+
 
 
 (defvar *chain-supplier* nil

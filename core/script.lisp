@@ -7,6 +7,7 @@
    #:script
    #:make-script
    #:script-commands
+   #:execute-scripts
    #:execute-script))
 
 (in-package :bp/core/script)
@@ -132,7 +133,7 @@ otherwise."
 
 (defun decode-integer (bytes)
   (if (not (zerop (length bytes)))
-      (let ((rbytes (nreverse bytes)))
+      (let ((rbytes (reverse bytes)))
         (multiple-value-bind (negative-p integer)
             (if (zerop (logand (aref rbytes 0) #x80))
                 (values nil (aref rbytes 0))
@@ -167,28 +168,39 @@ otherwise."
         bytes)
       #()))
 
-(defun execute-script (script &optional sighash)
+(defun execute-scripts (&key scripts sighash)
+  "Execute a sequence of scripts preserving the stack, but isolating
+command sets from one another."
   (let ((state (make-script-state
-                :commands (coerce (script-commands script) 'list)
+                ;; omit commands, they will be filled in the script
+                ;; loop
                 :sighash sighash
                 :stack nil
                 :altstack nil)))
     (loop
-       :for command := (pop (@commands state))
-       :while command
-       :for op := (if (consp command) (car command) command)
-       :for op-function := (nth-value 1 (opcode op))
-       :if (<= (opcode :op_push2) op (opcode :op_pushdata4))
+       :for script :in scripts
        :do
-         (push (cdr command) (@stack state))
-       :else
-       :do
-         (unless (funcall op-function state)
-           (warn "Bad operation: 0x~2,'0x (~{~a~^/~})." op (opcode op))
-           (return-from execute-script nil)))
+         (setf (@commands state) (coerce (script-commands script) 'list))
+         (loop
+            :for command := (pop (@commands state))
+            :while command
+            :for op := (if (consp command) (car command) command)
+            :for op-function := (nth-value 1 (opcode op))
+            :if (<= (opcode :op_push2) op (opcode :op_pushdata4))
+            :do
+              (push (cdr command) (@stack state))
+            :else
+            :do
+              (unless (funcall op-function state)
+                (warn "Bad operation: 0x~2,'0x (~{~a~^/~})." op (opcode op))
+                (return-from execute-scripts nil))))
     (values (and (not (zerop (length (@stack state))))
                  (not (equalp (first (@stack state)) #())))
             (mapcar #'decode-integer (@stack state)))))
+
+(defun execute-script (script &key sighash)
+  "Execute a single script (useful for REPL-based exploration)."
+  (execute-scripts :scripts (list script) :sighash sighash))
 
 ;;;-----------------------------------------------------------------------------
 ;;; Operation definitions
@@ -367,7 +379,7 @@ alt stack."
 
 (define-opcode op_dup 118 #x76 (state)
   "Duplicates the top stack item."
-  (when (> (length (@stack state)) 1)
+  (when (>= (length (@stack state)) 1)
     (push (first (@stack state)) (@stack state))
     t))
 
@@ -808,11 +820,13 @@ recently-executed OP_CODESEPARATOR to the end) are hashed. The
 signature used by OP_CHECKSIG must be a valid signature for this hash
 and public key. If it is, 1 is returned, 0 otherwise."
   (when (>= (length (@stack state)) 2)
-    (let ((pubkey (parse-pubkey (pop (@stack state))))
-          (signature (parse-signature (pop (@stack state)))))
-      (push (if (verify-signature pubkey (@sighash state) signature)
-                (encode-integer 1)
-                (encode-integer 0))
+    (let* ((pubkey (parse-pubkey (pop (@stack state))))
+           (sigdata (pop (@stack state)))
+           (signature (parse-signature (subseq sigdata 0 70) :type :der))
+           (hashtype (aref sigdata (1- (length sigdata))))
+           (sighash (funcall (@sighash state) hashtype)))
+      (push (encode-integer
+             (if (verify-signature pubkey sighash signature) 1 0))
             (@stack state))
       t)))
 

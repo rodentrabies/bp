@@ -5,4 +5,5 @@
    :bp/core/transaction
    :bp/core/script
    :bp/core/block
-   :bp/core/chain))
+   :bp/core/chain
+   :bp/core/consensus))

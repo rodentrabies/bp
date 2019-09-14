@@ -44,13 +44,13 @@
      :bits bits
      :nonce nonce)))
 
-(defun blockid (block-header)
+(defun block-hash (block-header)
   (hash256
    (ironclad:with-octet-output-stream (stream)
      (serialize block-header stream))))
 
 (defun block-id (block-header)
-  (to-hex (reverse (blockid block-header))))
+  (to-hex (reverse (block-hash block-header))))
 
 (defmethod print-object ((block-header block-header) stream)
   (print-unreadable-object (block-header stream :type t)

@@ -12,6 +12,8 @@
    #:tx-outputs
    #:tx-output
    #:tx-locktime
+   #:tx-hash
+   #:tx-id
    ;; Transaction input API:
    #:txin
    #:txin-previous-tx-id
@@ -72,7 +74,7 @@
      :outputs outputs
      :locktime locktime)))
 
-(defun txid (tx)
+(defun tx-hash (tx)
   "Raw transaction ID is a double SHA256 of its binary serialization."
   (hash256
    (ironclad:with-octet-output-stream (stream)
@@ -80,7 +82,7 @@
 
 (defun tx-id (tx)
   "Return hex-encoded little-endian representation of raw transaction ID."
-  (to-hex (reverse (txid tx))))
+  (to-hex (reverse (tx-hash tx))))
 
 (defun tx-output (tx index)
   (aref (tx-outputs tx) index))
