@@ -7,8 +7,18 @@ disk. The cryptographic utilities are aggregated from FFI bindings to
 the [secp256k1] and [ironclad]. HTTP client code uses [aserve], while
 and JSON handling is done with [jsown] package.
 
-## Interface
+**THIS BITCOIN CONSENSUS RULES IMPLEMENTATION IS NOT, AND WILL
+PROBABLY NEVER BE FULLY COMPLIANT WITH BITCOIN CORE IMPLEMENTATION. DO
+NOT RELY ON IT FOR VALIDATING YOUR MAINNET TRANSACTIONS, AS IT MAY
+EASILY PUT YOU OUT OF SYNC WITH THE NETWORK IN A LOT OF CORNER
+CASES.**
 
+## Interface
+Currently, this library only provides utilities for stateless
+interaction with Bitcoin from REPL. Storage, wallet and full node
+capabilities are somewhere in a distant future.
+
+### Chain interface
 Functions `bp:get-block-hash`, `bp:get-block` and `bp:get-transaction`
 allow to pull chain data from any external supplier specified with the
 `bp:with-chain-supplier` macro:
@@ -24,6 +34,19 @@ CL-USER> (bp:with-chain-supplier (:url      "http://localhost:8332"
 Under the hood, these operations call corresponding generic functions
 `bp:chain-get-{block-hash,block,transaction}` which take the supplier
 object as an explicit first argument.
+
+### Model and serialization
+Bitcoin data entities are represented by the following structures:
+- `bp:block-header`;
+- `bp:merkle-block`;
+- `bp:tx`;
+- `bp:txin`;
+- `bp:txout`;
+- `bp:script`.
+
+Functions named `bp:block-*` (both for `bp:block-header` and
+`bp:merkle-block`), `bp:tx-*`, `bp:txin-*` and `bp:txout-*` provide
+access to the components of the corresponding entities.
 
 Functions `bp:deserialize` and `bp:serialize` can be used to read and
 write any Bitcoin entity from and to any octet stream respectively:
@@ -50,6 +73,18 @@ CL-USER> (bp:decode 'bp:tx "0100000002f8615378...e097a988ac00000000")
 CL-USER> (bp:encode *)
 "0100000002f8615378...e097a988ac00000000"
 ```
+
+### Validation
+Functions `bp:validate` and `bp:validp` take an entity as well as the
+optional context parameters, and validate it according to an
+approximation of Bitcoin consensus rules. 
+
+Both functions return `t` if the entity is valid, but the
+`bp:validate` function signals an error otherwise, while the
+`bp:validp` function simply returns `nil`.
+
+Both functions assume the chain supplier context (i.e. they are called
+within the body of `bp:with-chain-supplier`).
 
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [ironclad]: https://github.com/sharplispers/ironclad
