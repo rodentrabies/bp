@@ -68,7 +68,7 @@ otherwise."
     (write-varint script-length stream)
     (write-bytes script-bytes stream script-length)))
 
-(defmethod deserialize ((entity-name (eql 'script)) stream)
+(defmethod parse ((entity-name (eql 'script)) stream)
   (let ((script-len (read-varint stream))
         (commands (list)))
     (loop

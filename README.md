@@ -48,20 +48,20 @@ Functions named `bp:block-*` (both for `bp:block-header` and
 `bp:merkle-block`), `bp:tx-*`, `bp:txin-*` and `bp:txout-*` provide
 access to the components of the corresponding entities.
 
-Functions `bp:deserialize` and `bp:serialize` can be used to read and
+Functions `bp:parse` and `bp:serialize` can be used to read and
 write any Bitcoin entity from and to any octet stream respectively:
 
 ``` cl
 CL-USER> (ironclad:with-octet-input-stream (stream #(1 0 ... 0 0))
-           (bp:deserialize 'bp:tx in-stream))
+           (bp:parse 'bp:tx in-stream))
 #<BP/CORE/TRANSACTION:TX 17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347>
 CL-USER> (ironclad:with-octet-output-stream (stream)
-           (bp:deserialize 'tx out-stream))
+           (bp:parse 'tx out-stream))
 #(1 0 ... 0 0)
 ```
 
 Note that while `bp:serialize` function take an entity as its first
-argument, `bp:deserialize` takes the symbol naming the class of the
+argument, `bp:parse` takes the symbol naming the class of the
 entity, behaving as *class method*.
 
 Functions `bp:decode` and `bp:encode` wrap above functions to decode

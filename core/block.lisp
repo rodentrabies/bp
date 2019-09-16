@@ -29,7 +29,7 @@
     (write-bytes bits stream 4)
     (write-bytes nonce stream 4)))
 
-(defmethod deserialize ((entity-type (eql 'block-header)) stream)
+(defmethod parse ((entity-type (eql 'block-header)) stream)
   (let ((version (read-int stream :size 4 :byte-order :little))
         (previous-block-hash (read-bytes stream 32 ))
         (merkle-root (read-bytes stream 32))

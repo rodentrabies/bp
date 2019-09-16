@@ -51,21 +51,21 @@
        :do (serialize (aref outputs i) stream))
     (write-int locktime stream :size 4 :byte-order :little)))
 
-(defmethod deserialize ((entity-type (eql 'tx)) stream)
+(defmethod parse ((entity-type (eql 'tx)) stream)
   (let* ((version (read-int stream :size 4 :byte-order :little))
          (num-inputs (read-varint stream))
          (inputs
           (loop
              :with input-array := (make-array num-inputs :element-type 'txin)
              :for i :below num-inputs
-             :do (setf (aref input-array i) (deserialize 'txin stream))
+             :do (setf (aref input-array i) (parse 'txin stream))
              :finally (return input-array)))
          (num-outputs (read-varint stream))
          (outputs
           (loop
              :with output-array := (make-array num-outputs :element-type 'txout)
              :for i :below num-outputs
-             :do (setf (aref output-array i) (deserialize 'txout stream))
+             :do (setf (aref output-array i) (parse 'txout stream))
              :finally (return output-array)))
          (locktime (read-int stream :size 4 :byte-order :little)))
     (make-tx
@@ -110,10 +110,10 @@
     (serialize script-sig stream)
     (write-int sequence stream :size 4 :byte-order :little)))
 
-(defmethod deserialize ((entity-type (eql 'txin)) stream)
+(defmethod parse ((entity-type (eql 'txin)) stream)
   (let ((previous-tx-id (read-bytes stream 32))
         (previous-tx-index (read-int stream :size 4 :byte-order :little))
-        (script-sig (deserialize 'script stream))
+        (script-sig (parse 'script stream))
         (sequence (read-int stream :size 4 :byte-order :little)))
     (make-txin
      :previous-tx-id previous-tx-id
@@ -138,9 +138,9 @@
     (write-int amount stream :size 8 :byte-order :little)
     (serialize script-pubkey stream)))
 
-(defmethod deserialize ((entity-type (eql 'txout)) stream)
+(defmethod parse ((entity-type (eql 'txout)) stream)
   (let ((amount (read-int stream :size 8 :byte-order :little))
-        (script-pubkey (deserialize 'script stream)))
+        (script-pubkey (parse 'script stream)))
     (make-txout
      :amount amount
      :script-pubkey script-pubkey)))

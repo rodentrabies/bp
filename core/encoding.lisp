@@ -2,7 +2,7 @@
   (:export
    ;; Serialization API:
    #:serialize
-   #:deserialize
+   #:parse
    #:encode
    #:decode
    ;; Utilities:
@@ -20,8 +20,8 @@
 (defgeneric serialize (entity stream)
   (:documentation "Serialize ENTITY into the stream."))
 
-(defgeneric deserialize (entity-class stream)
-  (:documentation "Deserialize bytes from the STREAM into an instance
+(defgeneric parse (entity-class stream)
+  (:documentation "Parse bytes from the STREAM into an instance
   of the class named ENTITY-CLASS."))
 
 (defun encode (entity)
@@ -33,7 +33,7 @@
 (defun decode (entity-class string)
   "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS from hex STRING."
   (ironclad:with-octet-input-stream (stream (ironclad:hex-string-to-byte-array string))
-    (deserialize entity-class stream)))
+    (parse entity-class stream)))
 
 (defun to-hex (bytes)
   "Shortcut to avoid using long symbol IRONCLAD:BYTE-ARRAY-TO-HEX-STRING."
