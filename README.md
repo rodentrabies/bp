@@ -13,6 +13,43 @@ NOT RELY ON IT FOR VALIDATING YOUR MAINNET TRANSACTIONS, AS IT MAY
 EASILY PUT YOU OUT OF SYNC WITH THE NETWORK IN A LOT OF CORNER
 CASES.**
 
+## Installation
+Assuming the [quicklisp] tool is available, the dependencies can be
+installed by evaluating the following forms:
+
+``` cl
+(ql:quickload :aserve)
+(ql:quickload :cffi)
+(ql:quickload :ironclad)
+(ql:quickload :jsown)
+```
+
+Elliptic curve cryptography utilities (transaction signing and
+verification) use a [secp256k1] library, so it must be installed as
+well (either manually, or using the system package manager if
+available):
+
+``` bash
+# Ubuntu
+apt install libsecp256k1 libsecp256k1-dev
+
+# Arch Linux
+pacman -Syu libsecp256k1
+
+# macOS
+brew tap cuber/homebrew-libsecp256k1
+brew install libsecp256k1
+```
+
+Once all the dependencies are installed, the `bp` system can be loaded
+by evaluating the following form (this assumes that ASDF is available
+and is able to find the system definition; more on that
+[here][asdf-registry]):
+
+``` cl
+(asdf:load-system :bp)
+```
+
 ## Interface
 Currently, this library only provides utilities for stateless
 interaction with Bitcoin from REPL. Storage, wallet and full node
@@ -90,3 +127,5 @@ within the body of `bp:with-chain-supplier`).
 [ironclad]: https://github.com/sharplispers/ironclad
 [aserve]: https://sourceforge.net/projects/portableaserve
 [jsown]: https://github.com/madnificent/jsown
+[quicklisp]: https://www.quicklisp.org/beta
+[asdf-registry]: https://common-lisp.net/project/asdf/asdf/Configuring-ASDF-to-find-your-systems.html
