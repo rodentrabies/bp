@@ -69,28 +69,38 @@ otherwise."
     (write-bytes script-bytes stream script-length)))
 
 (defmethod parse ((entity-name (eql 'script)) stream)
-  (let ((script-len (read-varint stream))
-        (commands (list)))
-    (loop
-       :with i := 0 :while (< i script-len)
-       :for op := (read-byte stream)
-       :if (<= (opcode :op_push1) op (opcode :op_push75))
-       :do
-         (push (cons op (read-bytes stream op)) commands)
-         (incf i (+ 1 op))
-       :else
-       :if (<= (opcode :op_pushdata1) op (opcode :op_pushdata4))
-       :do
-         (let* ((int-size (cond ((= op (opcode :op_pushdata1)) 1)
-                                ((= op (opcode :op_pushdata2)) 2)
-                                ((= op (opcode :op_pushdata4)) 4)))
-                (data-size (read-int stream :size int-size :byte-order :little)))
-           (push (cons op (read-bytes stream data-size)) commands)
-           (incf i (+ int-size data-size)))
-       :else
-       :do
-         (push op commands)
-         (incf i))
+  (let* ((script-len (read-varint stream))
+         (script-bytes (read-bytes stream script-len))
+         (commands (list)))
+    (ironclad:with-octet-input-stream (script-stream script-bytes)
+      (loop
+         :with i := 0 :while (< i script-len)
+         :for op := (read-byte script-stream)
+         :if (<= (opcode :op_push1) op (opcode :op_push75))
+         :do
+           (let ((read-size
+                  (if (>= (+ i 1 op) script-len)
+                      (- script-len (+ i 1))
+                      op)))
+            (push (cons op (read-bytes script-stream read-size)) commands)
+            (incf i (+ 1 op)))
+         :else
+         :if (<= (opcode :op_pushdata1) op (opcode :op_pushdata4))
+         :do
+           (let* ((int-size (cond ((= op (opcode :op_pushdata1)) 1)
+                                  ((= op (opcode :op_pushdata2)) 2)
+                                  ((= op (opcode :op_pushdata4)) 4)))
+                  (data-size (read-int script-stream :size int-size :byte-order :little))
+                  (read-size
+                   (if (>= (+ i int-size data-size) script-len)
+                       (- script-len (+ i int-size))
+                       data-size)))
+             (push (cons op (read-bytes script-stream read-size)) commands)
+             (incf i (+ 1 int-size data-size)))
+         :else
+         :do
+           (push op commands)
+           (incf i)))
     (make-script :commands (coerce (reverse commands) 'vector))))
 
 (defmethod print-object ((script script) stream)
