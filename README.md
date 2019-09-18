@@ -75,14 +75,14 @@ object as an explicit first argument.
 ### Model and serialization
 Bitcoin data entities are represented by the following structures:
 - `bp:block-header`;
-- `bp:merkle-block`;
+- `bp:cblock`;
 - `bp:tx`;
 - `bp:txin`;
 - `bp:txout`;
 - `bp:script`.
 
 Functions named `bp:block-*` (both for `bp:block-header` and
-`bp:merkle-block`), `bp:tx-*`, `bp:txin-*` and `bp:txout-*` provide
+`bp:cblock`), `bp:tx-*`, `bp:txin-*` and `bp:txout-*` provide
 access to the components of the corresponding entities.
 
 Functions `bp:parse` and `bp:serialize` can be used to read and

@@ -77,7 +77,7 @@
   ;; Second argument (0) tells Bitcoin RPC handler to return raw
   ;; hex-encoded block.
   (let ((hash (if (stringp hash) hash (to-hex (reverse hash)))))
-    (decode 'block-header (do-simple-rpc-call supplier "getblock" hash 0))))
+    (decode 'cblock (do-simple-rpc-call supplier "getblock" hash 0))))
 
 (defmethod chain-get-transaction ((supplier node-connection) id)
   (let ((id (if (stringp id) id (to-hex (reverse id)))))

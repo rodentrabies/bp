@@ -1,13 +1,51 @@
 (uiop:define-package :bp/core/block (:use :cl)
   (:use :bp/core/encoding
+        :bp/core/transaction
         :bp/crypto/hash)
   (:export
+   ;; Block header API:
    #:block-header
-   #:merkle-block))
+   #:block-version
+   #:block-previous-block-hash
+   #:block-merkle-root
+   #:block-timestamp
+   #:block-bits
+   #:block-nonce
+   #:block-hash
+   #:block-id
+   ;; Complete block API:
+   #:cblock
+   #:block-transactions
+   #:block-transaction))
 
 (in-package :bp/core/block)
 
-(defstruct (block-header (:conc-name block-))
+
+;;;-----------------------------------------------------------------------------
+;;; Generic API
+
+(defgeneric block-version (block))
+
+(defgeneric block-previous-block-hash (block))
+
+(defgeneric block-merkle-root (block))
+
+(defgeneric block-timestamp (block))
+
+(defgeneric block-bits (block))
+
+(defgeneric block-nonce (block))
+
+(defgeneric block-hash (block))
+
+(defun block-id (block)
+  (to-hex (reverse (block-hash block))))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Data structures and API implementation
+
+(defstruct block-header
   version
   previous-block-hash
   merkle-root
@@ -44,14 +82,6 @@
      :bits bits
      :nonce nonce)))
 
-(defun block-hash (block-header)
-  (hash256
-   (ironclad:with-octet-output-stream (stream)
-     (serialize block-header stream))))
-
-(defun block-id (block-header)
-  (to-hex (reverse (block-hash block-header))))
-
 (defmethod print-object ((block-header block-header) stream)
   (print-unreadable-object (block-header stream :type t)
     (format
@@ -59,10 +89,86 @@
      (block-id block-header)
      (to-hex (reverse (block-previous-block-hash block-header))))))
 
-;; TODO: :INCLUDE in this case might be a bad thing, as we would like
-;;       to be able to extract the BLOCK-HEADER structure from the
-;;       MERKLE-BLOCK, so maybe just use simple composition and
-;;       override accessors.
-(defstruct (merkle-block (:include block-header)
-                         (:conc-name block-))
+(defmethod block-version ((block-header block-header))
+  (block-header-version block-header))
+
+(defmethod block-previous-block-hash ((block-header block-header))
+  (block-header-previous-block-hash block-header))
+
+(defmethod block-merkle-root ((block-header block-header))
+  (block-header-merkle-root block-header))
+
+(defmethod block-timestamp ((block-header block-header))
+  (block-header-timestamp block-header))
+
+(defmethod block-bits ((block-header block-header))
+  (block-header-bits block-header))
+
+(defmethod block-nonce ((block-header block-header))
+  (block-header-nonce block-header))
+
+(defmethod block-hash ((block-header block-header))
+  (hash256
+   (ironclad:with-octet-output-stream (stream)
+     (serialize block-header stream))))
+
+
+(defstruct (cblock (:conc-name block-))
+  header
   transactions)
+
+(defun block-transaction (cblock index)
+  (aref (block-transactions cblock) index))
+
+(defmethod serialize ((cblock cblock) stream)
+  (let* ((header (block-header cblock))
+         (transactions (block-transactions cblock))
+         (num-transactions (length transactions)))
+    (serialize header stream)
+    (write-varint num-transactions stream)
+    (loop
+       :for i :below num-transactions
+       :do (serialize (aref transactions i) stream))))
+
+(defmethod parse ((entity-type (eql 'cblock)) stream)
+  (let* ((header (parse 'block-header stream))
+         (num-transactions (read-varint stream))
+         (transactions
+          (loop
+             :with transaction-array
+               := (make-array num-transactions :element-type 'tx)
+             :for i :below num-transactions
+             :do (setf (aref transaction-array i) (parse 'tx stream))
+             :finally (return transaction-array))))
+    (make-cblock
+     :header header
+     :transactions transactions)))
+
+(defmethod print-object ((cblock cblock) stream)
+  (print-unreadable-object (cblock stream :type t)
+    (format
+     stream "(~a txs)~&  id:   ~a~&  prev: ~a"
+     (length (block-transactions cblock))
+     (block-id (block-header cblock))
+     (to-hex (reverse (block-previous-block-hash cblock))))))
+
+(defmethod block-version ((cblock cblock))
+  (block-version (block-header cblock)))
+
+(defmethod block-previous-block-hash ((cblock cblock))
+  (block-previous-block-hash (block-header cblock)))
+
+(defmethod block-merkle-root ((cblock cblock))
+  (block-merkle-root (block-header cblock)))
+
+(defmethod block-timestamp ((cblock cblock))
+  (block-timestamp (block-header cblock)))
+
+(defmethod block-bits ((cblock cblock))
+  (block-bits (block-header cblock)))
+
+(defmethod block-nonce ((cblock cblock))
+  (block-nonce (block-header cblock)))
+
+(defmethod block-hash ((cblock cblock))
+  (block-hash (block-header cblock)))
