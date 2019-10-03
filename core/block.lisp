@@ -64,7 +64,7 @@
     (write-bytes previous-block-hash stream 32)
     (write-bytes merkle-root stream 32)
     (write-int timestamp stream :size 4 :byte-order :little)
-    (write-bytes bits stream 4)
+    (write-bytes (reverse bits) stream 4)
     (write-bytes nonce stream 4)))
 
 (defmethod parse ((entity-type (eql 'block-header)) stream)
@@ -72,7 +72,7 @@
         (previous-block-hash (read-bytes stream 32 ))
         (merkle-root (read-bytes stream 32))
         (timestamp (read-int stream :size 4 :byte-order :little))
-        (bits (read-bytes stream 4))
+        (bits (reverse (read-bytes stream 4)))
         (nonce (read-bytes stream 4)))
     (make-block-header
      :version version

@@ -11,6 +11,7 @@
 
 (in-package :bp/core/consensus)
 
+
 ;;; The definitions in this file contain Bitcoin consensus rules. The
 ;;; top-level consensus API consists of two functions: VALIDATE, which
 ;;; returns T if an entity from the model is valid, and signals an
@@ -29,6 +30,10 @@
 ;;; IMPLEMENTATION. DO NOT RELY ON IT FOR VALIDATING YOUR MAINNET
 ;;; TRANSACTIONS.
 
+
+;;;-----------------------------------------------------------------------------
+;;; Validation API
+
 (defgeneric validate (entity &key &allow-other-keys)
   (:documentation "Validate entity according to the Bitcoin Protocol
 consensus rules, throw an error if an entity is invalid for any reason."))
@@ -36,6 +41,49 @@ consensus rules, throw an error if an entity is invalid for any reason."))
 (defun validp (entity &rest context &key &allow-other-keys)
   "Return T if the ENTITY is valid, NIL otherwise."
   (ignore-errors (apply #'validate entity context)))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Blocks
+
+(defun bits-to-target (bits)
+  (let* ((f (ironclad:octets-to-integer bits :start 1))
+         (e (aref bits 0)))
+    (ironclad:integer-to-octets
+     (* f (expt 2 (* 8 (- e 3))))
+     :n-bits 256
+     :big-endian nil)))
+
+(defun block-target (block)
+  (bits-to-target (block-bits block)))
+
+(defun block-difficulty (block)
+  (let ((current-target (bits-to-target (block-bits block)))
+        (max-target
+         (bits-to-target
+          (make-array
+           4 :element-type '(unsigned-byte 8)
+           :initial-contents #(#x1d #x00 #xff #xff)))))
+    (float
+     (/ (ironclad:octets-to-integer max-target :big-endian nil)
+        (ironclad:octets-to-integer current-target :big-endian nil)))))
+
+(defmethod validate ((block-header block-header) &key)
+  (unless (< (ironclad:octets-to-integer
+              (block-hash block-header) :big-endian nil)
+             (ironclad:octets-to-integer
+              (block-target block-header) :big-endian nil))
+    (error "Block hash does not satisfy Proof-of-Work target."))
+  t)
+
+(defmethod validate ((cblock cblock) &key)
+  ;; TODO: validate transactions and merkle root
+  (validate (block-header cblock))
+  t)
+
+
+;;;-----------------------------------------------------------------------------
+;;; Transactions
 
 (defconstant +sighash-all+          #x01)
 (defconstant +sighash-none+         #x02)
