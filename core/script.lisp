@@ -832,8 +832,9 @@ and public key. If it is, 1 is returned, 0 otherwise."
   (when (>= (length (@stack state)) 2)
     (let* ((pubkey (parse-pubkey (pop (@stack state))))
            (sigdata (pop (@stack state)))
-           (signature (parse-signature (subseq sigdata 0 70) :type :der))
-           (hashtype (aref sigdata (1- (length sigdata))))
+           (len (length sigdata))
+           (signature (parse-signature (subseq sigdata 0 (1- len)) :type :der))
+           (hashtype (aref sigdata (1- len)))
            (sighash (funcall (@sighash state) hashtype)))
       (push (encode-integer
              (if (verify-signature pubkey sighash signature) 1 0))
@@ -857,10 +858,54 @@ signatures must be placed in the scriptSig using the same order as
 their corresponding public keys were placed in the scriptPubKey or
 redeemScript. If all signatures are valid, 1 is returned, 0
 otherwise. Due to a bug, one extra unused value is removed from the
-stack.")
+stack."
+  (when (< (length (@stack state)) 1)
+    (return-from op_checkmultisig nil))
+  (let ((n (decode-integer (pop (@stack state))))
+        (pubkeys (list)))
+    (when (< (length (@stack state)) (1+ n))
+      (return-from op_checkmultisig nil))
+    (loop
+       :repeat n
+       :for pk := (parse-pubkey (pop (@stack state)))
+       :do (push pk pubkeys))
+    (let ((m (decode-integer (pop (@stack state))))
+          (signatures (list)))
+      (when (< (length (@stack state)) (1+ m))
+        (return-from op_checkmultisig nil))
+      (loop
+         :repeat m
+         :for sigdata  := (pop (@stack state))
+         :for len      := (length sigdata)
+         :for sig      := (parse-signature (subseq sigdata 0 (1- len)))
+         :for hashtype := (aref sigdata (1- len))
+         :do (push (cons sig hashtype) signatures))
+      ;; Off-by-one bug in the Bitcoin's OP_CHECKMULTISIG
+      ;; implementation.
+      (pop (@stack state))
+      (setf pubkeys (reverse pubkeys))
+      (setf signatures (reverse signatures))
+      (loop
+         :while pubkeys
+         :for   pubkey           := (pop pubkeys)
+         :with  (sig . hashtype) := (pop signatures)
+         :with  sighash          := (funcall (@sighash state) hashtype)
+         ;; Only proceed to the next signature if ECDSA match was
+         ;; found.
+         :when (verify-signature pubkey sighash sig)
+         :do
+           (let ((sig/hashtype (pop signatures)))
+             (setf sig      (car sig/hashtype))
+             (setf hashtype (cdr sig/hashtype))
+             (setf sighash  (funcall (@sighash state) hashtype))))
+      ;; Return 1 if all signatures have been checked, 0 otherwise.
+      (push (encode-integer (if (null signatures) 1 0)) (@stack state))
+      t)))
 
 (define-opcode op_checkmultisigverify 175 #xaf (state)
-  "Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward.")
+  "Same as OP_CHECKMULTISIG, but OP_VERIFY is executed afterward."
+  (when (op_checkmultisig state)
+    (op_verify state)))
 
 ;;; Script: pseudo-words
 
