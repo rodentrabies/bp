@@ -1,5 +1,7 @@
 # BP - Bitcoin Protocol
 
+[![Quicklisp](http://quickdocs.org/badge/bp.svg)](http://quickdocs.org/bp/)
+
 This is a Common Lisp implementation of the various components of the
 Bitcoin Protocol. The serialization/deserialization utils may be used
 for reading the block data both from peers and from local database on
@@ -14,20 +16,10 @@ EASILY PUT YOU OUT OF SYNC WITH THE NETWORK IN A LOT OF CORNER
 CASES.**
 
 ## Installation
-Assuming the [quicklisp] tool is available, the dependencies can be
-installed by evaluating the following forms:
-
-``` cl
-(ql:quickload :aserve)
-(ql:quickload :cffi)
-(ql:quickload :ironclad)
-(ql:quickload :jsown)
-```
-
 Elliptic curve cryptography utilities (transaction signing and
-verification) use a [secp256k1] library, so it must be installed as
-well (either manually, or using the system package manager if
-available):
+verification) use a [secp256k1] library, so it must be installed
+before building the `bp` system (either manually, or using the system
+package manager if available):
 
 ``` bash
 # Ubuntu
@@ -41,9 +33,22 @@ brew tap cuber/homebrew-libsecp256k1
 brew install libsecp256k1
 ```
 
-Once all the dependencies are installed, the `bp` system can be loaded
-by evaluating the following form (this assumes that ASDF is available
-and is able to find the system definition; more on that
+Once [secp256k1] is ready, `bp` can be installed via [quicklisp] tool:
+
+``` cl
+(ql:quickload :bp)
+```
+
+Alternatively, `bp` system can be loaded from sources, assuming the
+following Common Lisp packages are available locally:
+- [`asdf`][asdf];
+- [`aserve`][aserve];
+- [`cffi`][cffi];
+- [`ironclad`][ironclad];
+- [`jsown`][jsown].
+
+In order to load `bp` from sources, evaluate the following form (this
+assumes that ASDF is able to find the system definition; more on that
 [here][asdf-registry]):
 
 ``` cl
@@ -124,6 +129,8 @@ Both functions assume the chain supplier context (i.e. they are called
 within the body of `bp:with-chain-supplier`).
 
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
+[asdf]: https://gitlab.common-lisp.net/asdf/asdf
+[cffi]: https://github.com/cffi/cffi
 [ironclad]: https://github.com/sharplispers/ironclad
 [aserve]: https://sourceforge.net/projects/portableaserve
 [jsown]: https://github.com/madnificent/jsown
