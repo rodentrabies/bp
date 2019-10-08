@@ -345,6 +345,100 @@
                       *context-none* csignature cinput inputlen))
         (bytes-from-foreign nil csignature 64)))))
 
+(defun ecdsa-signature-parse-der-lax (input)
+  "This function is taken from the libsecp256k1 distribution and
+implements DER parsing for ECDSA signatures, while supporting an
+arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
+  (let* ((inputlen (length input))
+         (tmpsig   (make-array 64 :element-type '(unsigned-byte 8)))
+         (sig      (ecdsa-signature-parse-compact tmpsig))
+         pos lenbyte rpos rlen spos slen overflow)
+    (macrolet ((%fail ()
+                 `(return-from ecdsa-signature-parse-der-lax nil))
+               (%check-tag ()
+                 `(progn
+                    (when (or (= pos inputlen) (/= (aref input pos) #x02))
+                      (%fail))
+                    (incf pos)))
+               (%compute-len (cpos clen)
+                 `(progn
+                    (when (= pos inputlen) (%fail))
+                    (setf lenbyte (aref input pos))
+                    (incf pos)
+                    (if (not (= 0 (logand lenbyte #x80)))
+                        (progn
+                          (decf lenbyte #x80)
+                          (when (> lenbyte (- inputlen pos)) (%fail))
+                          (loop
+                             :while (and (> lenbyte 0) (= 0 (aref input pos)))
+                             :do
+                               (incf pos)
+                               (decf lenbyte))
+                          (when (>= lenbyte 4) (%fail))
+                          (setf ,clen 0)
+                          (loop
+                             :while (> lenbyte 0)
+                             :do
+                               (setf ,clen (+ (ash ,clen 8) (aref input pos)))
+                               (incf pos)
+                               (decf lenbyte)))
+                        (setf ,clen lenbyte))
+                    (when (> ,clen (- inputlen pos)) (%fail))
+                    (setf ,cpos pos)))
+               (%skip-zeroes (cpos clen)
+                 `(loop
+                     :while (and (> ,clen 0) (= 0 (aref input ,cpos)))
+                     :do
+                       (decf ,clen)
+                       (incf ,cpos)))
+               (%copy (cpos clen offset)
+                 `(if (> ,clen 32)
+                      (setf overflow t)
+                      (loop
+                         :for i :below ,clen
+                         :do (setf
+                              (aref tmpsig (+ (- ,offset ,clen) i))
+                              (aref input (+ ,cpos i)))))))
+      ;; Sequence tag byte.
+      (setf pos 0)
+      (when (or (= pos inputlen) (/= (aref input pos) #x30))
+        (%fail))
+      (incf pos)
+      ;; Sequence length bytes.
+      (when (= pos inputlen) (%fail))
+      (setf lenbyte (aref input pos))
+      (incf pos)
+      (when (not (= 0 (logand lenbyte #x80)))
+        (decf lenbyte #x80)
+        (when (> lenbyte (- inputlen pos)) (%fail))
+        (incf pos lenbyte))
+      ;; Integer tag byte for R.
+      (%check-tag)
+      ;; Integer len for R.
+      (%compute-len rpos rlen)
+      (incf pos rlen)
+      ;; Integer tag byte for S.
+      (%check-tag)
+      ;; Integer len for R.
+      (%compute-len spos slen)
+      ;; Ignore leading zeroes in R.
+      (%skip-zeroes rpos rlen)
+      ;; Copy R value.
+      (%copy rpos rlen 32)
+      ;; Ignore leading zeroes in S.
+      (%skip-zeroes spos slen)
+      ;; Copy S value.
+      (%copy spos slen 64)
+      ;; Parse fixed signature.
+      (when (not overflow)
+        (setf overflow (not (setf sig (ecdsa-signature-parse-compact tmpsig)))))
+      (when overflow
+        ;; Overwrite the result again with a correctly-parsed but
+        ;; invalid signature if parsing failed.
+        (loop :for i :below 64 :do (setf (aref tmpsig i) 0))
+        (setf sig (ecdsa-signature-parse-compact tmpsig)))
+      sig)))
+
 ;; Serialize an ECDSA signature in DER format.
 ;;
 ;; Returns: 1 if enough space was available to serialize, 0 otherwise
@@ -677,16 +771,17 @@
 (defun serialize-pubkey (key)
   (ec-pubkey-serialize (key-bytes key)))
 
-(defun parse-signature (bytes &key (type :compact))
-  (%make-signature
-   :bytes
-   (ecase type
-     (:compact
-      (ecdsa-signature-parse-compact bytes))
-     (:der
-      (ecdsa-signature-parse-der bytes)))))
+(defun parse-signature (bytes &key (type :relaxed))
+  (let* ((bytes (ecase type
+                  (:compact
+                   (ecdsa-signature-parse-compact bytes))
+                  (:der
+                   (ecdsa-signature-parse-der bytes))
+                  (:relaxed
+                   (ecdsa-signature-parse-der-lax bytes)))))
+    (%make-signature :bytes bytes)))
 
-(defun serialize-signature (signature &key (type :compact))
+(defun serialize-signature (signature &key (type :der))
   (ecase type
     (:compact
      (ecdsa-signature-serialize-compact (signature-bytes signature)))
@@ -697,4 +792,6 @@
   (%make-signature :bytes (ecdsa-sign hash (key-bytes key))))
 
 (defun verify-signature (pubkey hash signature)
-  (ecdsa-verify (signature-bytes signature) hash (pubkey-bytes pubkey)))
+  (let* ((bytes  (signature-bytes signature))
+         (nbytes (ecdsa-signature-normalize bytes)))
+    (ecdsa-verify (or nbytes bytes) hash (pubkey-bytes pubkey))))

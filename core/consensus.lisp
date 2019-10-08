@@ -174,15 +174,20 @@ consensus rules, throw an error if an entity is invalid for any reason."))
       (error "Unknown previous transaction."))
     (unless (< prev-tx-index (length (tx-outputs prev-tx)))
       (error "Unknown previous output."))
-    (let ((script-pubkey (txout-script-pubkey (tx-output prev-tx prev-tx-index)))
-          (script-sig (txin-script-sig txin)))
-      (unless (execute-scripts
-               :scripts (list script-sig script-pubkey)
-               :sighash (lambda (hashtype)
-                          (tx-sighash tx txin-index script-pubkey hashtype)))
+    (let* ((script-pubkey (txout-script-pubkey (tx-output prev-tx prev-tx-index)))
+           (script-sig (txin-script-sig txin))
+           (sighashf
+            (lambda (hashcode hashtype)
+              (tx-sighash tx txin-index hashcode hashtype)))
+           (script-state (make-script-state :sighashf sighashf)))
+      (unless (execute-scripts script-sig script-pubkey :state script-state)
         (error "Script execution failed.")))
     t))
 
 (defmethod validate ((txout txout) &key)
   ;; Assume all txouts are valid for now.
   t)
+
+#+test
+(defvar *non-p2sh-tx*
+  "6a26d2ecb67f27d1fa5524763b49029d7106e91e3cc05743073461a719776192")

@@ -6,6 +6,7 @@
   (:export
    #:script
    #:make-script
+   #:make-script-state
    #:script-commands
    #:execute-scripts
    #:execute-script))
@@ -137,9 +138,17 @@ otherwise."
 
 (defstruct (script-state (:conc-name @))
   commands
-  sighash
+  discard
   stack
-  altstack)
+  altstack
+  sighashf)
+
+(defun @sighash (state hashtype)
+  (let* ((prefix   (reverse (@discard state)))
+         (suffix   (@commands state))
+         (commands (concatenate 'vector suffix prefix))
+         (hashcode (make-script :commands commands)))
+    (funcall (@sighashf state) hashcode hashtype)))
 
 (defun decode-integer (bytes)
   (if (not (zerop (length bytes)))
@@ -178,39 +187,94 @@ otherwise."
         bytes)
       #()))
 
-(defun execute-scripts (&key scripts sighash)
-  "Execute a sequence of scripts preserving the stack, but isolating
-command sets from one another."
-  (let ((state (make-script-state
-                ;; omit commands, they will be filled in the script
-                ;; loop
-                :sighash sighash
-                :stack nil
-                :altstack nil)))
+(defun command-op (command)
+  (if (consp command)
+      (car command)
+      command))
+
+(defun command-payload (command)
+  (if (consp command)
+      (cdr command)
+      nil))
+
+(defun execute-script (script &key state)
+  "Execute a script using a state that can be provided externally."
+  (let ((state (or state (make-script-state))))
+    (setf (@commands state) (coerce (script-commands script) 'list))
+    (setf (@discard state) nil)
     (loop
-       :for script :in scripts
+       :for command := (pop (@commands state))
+       :while command
+       :for op := (command-op command)
+       :for payload := (command-payload command)
+       :for op-function := (nth-value 1 (opcode op))
+       :do (format t
+                   "op:       ~a~@
+                    payload:  ~a~@
+                    commands: ~a~@
+                    stack:    ~a~%~%"
+                   (first (opcode op))
+                   (and payload (to-hex payload))
+                   (mapcar
+                    (lambda (x) (first (opcode (command-op x))))
+                    (@commands state))
+                   (@stack state))
+       :do (push command (@discard state))
+       ;; Non-push command.
+       :if (null payload)
        :do
-         (setf (@commands state) (coerce (script-commands script) 'list))
-         (loop
-            :for command := (pop (@commands state))
-            :while command
-            :for op := (if (consp command) (car command) command)
-            :for op-function := (nth-value 1 (opcode op))
-            :if (<= (opcode :op_push2) op (opcode :op_pushdata4))
-            :do
-              (push (cdr command) (@stack state))
-            :else
-            :do
-              (unless (funcall op-function state)
-                (warn "Bad operation: 0x~2,'0x (~{~a~^/~})." op (opcode op))
-                (return-from execute-scripts nil))))
+         (unless (funcall op-function state)
+           (warn "Script error: 0x~2,'0x (~{~a~^/~})." op (opcode op))
+           (return-from execute-script nil))
+       :else
+       :do
+         (push payload (@stack state)))
     (values (and (not (zerop (length (@stack state))))
                  (not (equalp (first (@stack state)) #())))
             (mapcar #'decode-integer (@stack state)))))
 
-(defun execute-script (script &key sighash)
-  "Execute a single script (useful for REPL-based exploration)."
-  (execute-scripts :scripts (list script) :sighash sighash))
+(defun p2sh-p (script-pubkey)
+  "Check if current SCRIPT-PUBKEY indicates the BIP 0016 (p2sh)
+pattern:
+    <redeem-script>
+    OP_HASH160
+    <hash160>
+    OP_EQUAL"
+  ;; TODO: this must also check block timestamp > 1333238400
+  (let ((commands (script-commands script-pubkey)))
+    (and (= (length commands) 3)
+         (= (command-op (aref commands 0)) (opcode :op_hash160))
+         (= (command-op (aref commands 1)) (opcode :op_push20))
+         (= (command-op (aref commands 2)) (opcode :op_equal)))))
+
+(defun p2sh (state script-pubkey)
+  (let ((redeem-script (first (@stack state))))
+    ;; Execute SCRIPT-PUBKEY to verify that the hash matches.
+    (execute-script script-pubkey :state state)
+    ;; Verify that OP_EQUAL returned True.
+    (when (equalp (pop (@stack state)) #())
+      (warn "P2SH error: hash mismatch.")
+      (return-from p2sh nil))
+    ;; Hash matches, so add redeem script to the command set.
+    (let* ((redeem-script-length (length redeem-script))
+           (redeem-script-bytes
+            (ironclad:with-octet-output-stream (stream)
+              (write-varint redeem-script-length stream)
+              (write-bytes redeem-script stream redeem-script-length))))
+      (ironclad:with-octet-input-stream (stream redeem-script-bytes)
+        ;; Execute redeem-script.
+        (execute-script (parse 'script stream) :state state)))))
+
+(defun execute-scripts (script-sig script-pubkey &key state)
+  "Execute SCRIPT-SIG and SCRIPT-PUBKEY in succession, preserving the
+stack and performing the special rule detection (P2SH, SegWit)."
+  (let ((state (or state (make-script-state))))
+    (when (execute-script script-sig :state state)
+      (cond
+        ((p2sh-p script-pubkey)
+         (p2sh state script-pubkey))
+        (t
+         (execute-script script-pubkey :state state))))))
 
 ;;;-----------------------------------------------------------------------------
 ;;; Operation definitions
@@ -822,7 +886,8 @@ RIPEMD-160."
 
 (define-opcode op_codeseparator 171 #xab (state)
   "All of the signature checking words will only match signatures to
-the data after the most recently-executed OP_CODESEPARATOR.")
+the data after the most recently-executed OP_CODESEPARATOR."
+  (setf (@discard state) (list (opcode :op_codeseparator))))
 
 (define-opcode op_checksig 172 #xac (state)
   "The entire transaction's outputs, inputs, and script (from the most
@@ -833,9 +898,9 @@ and public key. If it is, 1 is returned, 0 otherwise."
     (let* ((pubkey (parse-pubkey (pop (@stack state))))
            (sigdata (pop (@stack state)))
            (len (length sigdata))
-           (signature (parse-signature (subseq sigdata 0 (1- len)) :type :der))
+           (signature (parse-signature (subseq sigdata 0 (1- len))))
            (hashtype (aref sigdata (1- len)))
-           (sighash (funcall (@sighash state) hashtype)))
+           (sighash (@sighash state hashtype)))
       (push (encode-integer
              (if (verify-signature pubkey sighash signature) 1 0))
             (@stack state))
@@ -879,25 +944,19 @@ stack."
          :for len      := (length sigdata)
          :for sig      := (parse-signature (subseq sigdata 0 (1- len)))
          :for hashtype := (aref sigdata (1- len))
-         :do (push (cons sig hashtype) signatures))
+         :do (push (list sig hashtype) signatures))
       ;; Off-by-one bug in the Bitcoin's OP_CHECKMULTISIG
       ;; implementation.
       (pop (@stack state))
-      (setf pubkeys (reverse pubkeys))
-      (setf signatures (reverse signatures))
       (loop
          :while pubkeys
-         :for   pubkey           := (pop pubkeys)
-         :with  (sig . hashtype) := (pop signatures)
-         :with  sighash          := (funcall (@sighash state) hashtype)
+         :for   pubkey         := (pop pubkeys)
+         :with  (sig hashtype) := (pop signatures)
          ;; Only proceed to the next signature if ECDSA match was
          ;; found.
-         :when (verify-signature pubkey sighash sig)
+         :when (verify-signature pubkey (@sighash state hashtype) sig)
          :do
-           (let ((sig/hashtype (pop signatures)))
-             (setf sig      (car sig/hashtype))
-             (setf hashtype (cdr sig/hashtype))
-             (setf sighash  (funcall (@sighash state) hashtype))))
+           (multiple-value-setq (sig hashtype) (values-list (pop signatures))))
       ;; Return 1 if all signatures have been checked, 0 otherwise.
       (push (encode-integer (if (null signatures) 1 0)) (@stack state))
       t)))
