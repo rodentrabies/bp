@@ -9,7 +9,8 @@
    #:make-script-state
    #:script-commands
    #:execute-scripts
-   #:execute-script))
+   #:execute-script
+   #:*trace-script-execution*))
 
 (in-package :bp/core/script)
 
@@ -197,6 +198,32 @@ otherwise."
       (cdr command)
       nil))
 
+(defvar *trace-script-execution* nil
+  "Dynamic variable to control printing the steps of script execution.")
+
+(defun print-script-execution-state (current-command state)
+  (flet ((command-op-name (command)
+           (string-upcase (first (opcode (command-op command)))))
+         (hex-sequence (bytes)
+           (map 'vector (lambda (b) (format nil "~x" b)) bytes)))
+    (format
+     t "op:       ~a~@
+        payload:  ~a~@
+        commands: <~{~a~^ ~}>~@
+        stack:    ~a~%~%"
+     (command-op-name current-command)
+     ;; Print hex-encoded payload, if current command is a push
+     ;; command, or '-' character otherwise.
+     (if (command-payload current-command)
+         (hex-sequence (command-payload current-command))
+         "-")
+     ;; Print command names, omitting payloads.
+     (mapcar #'command-op-name (@commands state))
+     ;; Print stack or '()' if the stack is empty.
+     (if (@stack state)
+         (mapcar #'hex-sequence (@stack state))
+         "()"))))
+
 (defun execute-script (script &key state)
   "Execute a script using a state that can be provided externally."
   (let ((state (or state (make-script-state))))
@@ -208,24 +235,20 @@ otherwise."
        :for op := (command-op command)
        :for payload := (command-payload command)
        :for op-function := (nth-value 1 (opcode op))
-       :do (format t
-                   "op:       ~a~@
-                    payload:  ~a~@
-                    commands: ~a~@
-                    stack:    ~a~%~%"
-                   (first (opcode op))
-                   (and payload (to-hex payload))
-                   (mapcar
-                    (lambda (x) (first (opcode (command-op x))))
-                    (@commands state))
-                   (@stack state))
+       ;; Save current command in the discard to be able to compute
+       ;; the hashcode.
        :do (push command (@discard state))
+       ;; When *TRACE-SCRIPT-EXECUTION* dynamic variable is true,
+       ;; print the current step of script execution.
+       :when *trace-script-execution*
+       :do (print-script-execution-state command state)
        ;; Non-push command.
        :if (null payload)
        :do
          (unless (funcall op-function state)
            (warn "Script error: 0x~2,'0x (~{~a~^/~})." op (opcode op))
            (return-from execute-script nil))
+       ;; Push command.
        :else
        :do
          (push payload (@stack state)))

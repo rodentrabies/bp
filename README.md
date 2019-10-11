@@ -128,6 +128,49 @@ Both functions return `t` if the entity is valid, but the
 Both functions assume the chain supplier context (i.e. they are called
 within the body of `bp:with-chain-supplier`).
 
+Dynamic variable `bp:*trace-script-execution*` can be used to enable
+printing the steps of script execution (chain supplier macro omitted):
+
+``` cl
+CL-USER> (setf bp:*trace-script-execution* t)
+t
+CL-USER> (bp:validate (bp:get-transaction "17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347"))
+op:       OP_PUSH22
+payload:  #(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22 69
+            55)
+commands: <>
+stack:    ()
+
+op:       OP_HASH160
+payload:  -
+commands: <OP_PUSH20 OP_EQUAL>
+stack:    (#(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22
+             69 55))
+
+op:       OP_PUSH20
+payload:  #(29 28 f4 3a f1 8d 2d 60 e8 a8 43 54 d 80 86 b3 5 34 13 39)
+commands: <OP_EQUAL>
+stack:    (#(29 28 f4 3a f1 8d 2d 60 e8 a8 43 54 d 80 86 b3 5 34 13 39))
+
+op:       OP_EQUAL
+payload:  -
+commands: <>
+stack:    (#(29 28 f4 3a f1 8d 2d 60 e8 a8 43 54 d 80 86 b3 5 34 13 39)
+           #(29 28 f4 3a f1 8d 2d 60 e8 a8 43 54 d 80 86 b3 5 34 13 39))
+
+op:       OP_FALSE
+payload:  -
+commands: <OP_PUSH20>
+stack:    ()
+
+op:       OP_PUSH20
+payload:  #(a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22 69 55)
+commands: <>
+stack:    (#())
+
+t
+```
+
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [asdf]: https://gitlab.common-lisp.net/asdf/asdf
 [cffi]: https://github.com/cffi/cffi
