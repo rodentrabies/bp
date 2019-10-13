@@ -1,6 +1,7 @@
 # BP - Bitcoin Protocol
 
 [![Quicklisp](http://quickdocs.org/badge/bp.svg)](http://quickdocs.org/bp/)
+[![Build Status](https://travis-ci.com/mrwhythat/bp.svg?branch=master)](https://travis-ci.com/mrwhythat/bp)
 
 This is a Common Lisp implementation of the various components of the
 Bitcoin Protocol. The serialization/deserialization utils may be used
@@ -36,7 +37,7 @@ brew install libsecp256k1
 Once [secp256k1] is ready, `bp` can be installed via [quicklisp] tool:
 
 ``` cl
-(ql:quickload :bp)
+(ql:quickload "bp")
 ```
 
 Alternatively, `bp` system can be loaded from sources, assuming the
@@ -52,7 +53,7 @@ assumes that ASDF is able to find the system definition; more on that
 [here][asdf-registry]):
 
 ``` cl
-(asdf:load-system :bp)
+(asdf:load-system "bp")
 ```
 
 ## Interface
@@ -134,7 +135,8 @@ printing the steps of script execution (chain supplier macro omitted):
 ``` cl
 CL-USER> (setf bp:*trace-script-execution* t)
 t
-CL-USER> (bp:validate (bp:get-transaction "17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347"))
+CL-USER> (bp:validate
+          (bp:get-transaction "17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347"))
 op:       OP_PUSH22
 payload:  #(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22 69
             55)
