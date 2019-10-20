@@ -115,11 +115,15 @@ otherwise."
              (map 'list #'print-command (script-commands script))))))
 
 (defun script (&rest symbolic-commands)
-  "Convert Lisp representation of script sequence into a SCRIPT object."
+  "Construct a SCRIPT object from a sequence of Lisp objects, doing
+the best effort to detect/convert the provided values."
   (flet ((command (symbolic-command)
            (etypecase symbolic-command
-             (string
-              (let* ((data (from-hex symbolic-command))
+             ((or array string)
+              (let* ((data
+                      (if (stringp symbolic-command)
+                          (from-hex symbolic-command)
+                          symbolic-command))
                      (data-length (length data)))
                 (cons (cond ((> data-length 520)
                              (error "Data element is too long."))
@@ -133,6 +137,12 @@ otherwise."
                             ((< (integer-length data-length) 32)
                              (opcode :op_pushdata4)))
                       data)))
+             (cons
+              (let* ((symbolic-op (car symbolic-command))
+                     (op (if (symbolp symbolic-op)
+                             (first (opcode symbolic-op))
+                             symbolic-op)))
+               (cons op (cdr symbolic-command))))
              (keyword
               (opcode symbolic-command)))))
     (make-script :commands (map 'vector #'command symbolic-commands))))
@@ -142,14 +152,17 @@ otherwise."
   discard
   stack
   altstack
-  sighashf)
+  witness
+  sighashf
+  sigversion)
 
 (defun @sighash (state hashtype)
-  (let* ((prefix   (reverse (@discard state)))
-         (suffix   (@commands state))
-         (commands (concatenate 'vector suffix prefix))
-         (hashcode (make-script :commands commands)))
-    (funcall (@sighashf state) hashcode hashtype)))
+  (let* ((prefix     (reverse (@discard state)))
+         (suffix     (@commands state))
+         (commands   (concatenate 'vector suffix prefix))
+         (scriptcode (make-script :commands commands))
+         (sigversion (@sigversion state)))
+    (funcall (@sighashf state) scriptcode hashtype sigversion)))
 
 (defun decode-integer (bytes)
   (if (not (zerop (length bytes)))
@@ -158,11 +171,11 @@ otherwise."
             (if (zerop (logand (aref rbytes 0) #x80))
                 (values nil (aref rbytes 0))
                 (values t (logand (aref rbytes 0) #x7f)))
-         (loop
-            :for i :from 1 :below (length rbytes)
-            :do (setf integer (+ (ash integer 8) (aref rbytes i)))
-            :finally (setf integer (if negative-p (- integer) integer)))
-         integer))
+          (loop
+             :for i :from 1 :below (length rbytes)
+             :do (setf integer (+ (ash integer 8) (aref rbytes i)))
+             :finally (setf integer (if negative-p (- integer) integer)))
+          integer))
       0))
 
 (defun encode-integer (integer)
@@ -246,8 +259,7 @@ otherwise."
        :if (null payload)
        :do
          (unless (funcall op-function state)
-           (warn "Script error: 0x~2,'0x (~{~a~^/~})." op (opcode op))
-           (return-from execute-script nil))
+           (error "Script error: 0x~2,'0x (~{~a~^/~})." op (opcode op)))
        ;; Push command.
        :else
        :do
@@ -270,34 +282,131 @@ pattern:
          (= (command-op (aref commands 1)) (opcode :op_push20))
          (= (command-op (aref commands 2)) (opcode :op_equal)))))
 
-(defun p2sh (state script-pubkey)
-  (let ((redeem-script (first (@stack state))))
+(defun segwit-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates the BIP 0141 (Segregated
+Witness) structure:
+    <version-byte>    (1 byte, OP_{0..16})
+    <witness-program> (2-40 bytes)"
+  (let ((commands (script-commands script-pubkey)))
+    (when (= (length commands) 2)
+      (let ((version (command-op (aref commands 0)))
+            (program (command-payload (aref commands 1))))
+        (and
+         ;; Version byte must be in {OP_0, OP_1, ..., OP_16}.
+         (or (= version (opcode :op_0))
+             (<= (opcode :op_1) version (opcode :op_16)))
+         ;; Witness program must be between 2 and 40 bytes.
+         (<= 2 (length program) 40))))))
+
+(defun p2wpkh-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Public Key Hash
+script structure:
+    <version-byte>
+    <20-byte witness-program>"
+  (and
+   (segwit-p script-pubkey)
+   (=  0 (aref (script-commands script-pubkey) 0))
+   (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
+
+(defun p2wsh-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Script Hash
+script structure:
+    <version-byte>
+    <20-byte witness-program>"
+  (and
+   (segwit-p script-pubkey)
+   (=  0 (aref (script-commands script-pubkey) 0))
+   (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
+
+(defun execute-p2sh (script-pubkey &key state)
+  (let ((redeem-data (first (@stack state))))
     ;; Execute SCRIPT-PUBKEY to verify that the hash matches.
     (execute-script script-pubkey :state state)
     ;; Verify that OP_EQUAL returned True.
     (when (equalp (pop (@stack state)) #())
-      (warn "P2SH error: hash mismatch.")
-      (return-from p2sh nil))
+      (error "P2SH error: hash mismatch."))
     ;; Hash matches, so add redeem script to the command set.
-    (let* ((redeem-script-length (length redeem-script))
+    (let* ((redeem-script-length (length redeem-data))
            (redeem-script-bytes
             (ironclad:with-octet-output-stream (stream)
               (write-varint redeem-script-length stream)
-              (write-bytes redeem-script stream redeem-script-length))))
+              (write-bytes redeem-data stream redeem-script-length))))
+      ;; Parse and execute the redeem-script.
       (ironclad:with-octet-input-stream (stream redeem-script-bytes)
-        ;; Execute redeem-script.
+        (let ((redeem-script (parse 'script stream)))
+          ;; Override the sigversion set in EXECUTE-SCRIPTS.
+          (setf (@sigversion state) (script-sigversion redeem-script))
+          (cond
+            ;; P2SH-P2WPKH (P2WPKH nested in P2SH).
+            ((p2wpkh-p redeem-script)
+             (execute-p2wpkh redeem-script :state state))
+            ;; P2SH-P2WSH (P2WSH nested in P2SH).
+            ((p2wsh-p redeem-script)
+             (execute-p2wsh redeem-script :state state))
+            ;; Regular P2SH.
+            (t
+             (execute-script redeem-script :state state))))))))
+
+(defun execute-p2wpkh (script-pubkey &key state)
+  (let* ((witness (@witness state))
+         (witness-stack (coerce witness 'list)))
+    (when (execute-script (apply #'script witness-stack) :state state)
+      (let ((witness-program (aref (script-commands script-pubkey) 1)))
+        (execute-script
+         (script
+          :op_dup :op_hash160 witness-program :op_equalverify :op_checksig)
+         :state state)))))
+
+(defun execute-p2wsh (script-pubkey &key state)
+  (let* ((witness (@witness state))
+         (witness-length (length witness))
+         (witness-stack (coerce (subseq witness 0 (1- witness-length)) 'list)))
+    ;; Execute WITNESS-STACK to push data items to stack. We don't
+    ;; care if returned value is non-false.
+    (execute-script (apply #'script witness-stack) :state state)
+    ;; Verify that SHA256(<witness-script>) is equal to
+    ;; <witness-program>, decode and execute witness script.
+    (let* ((witness-script-data (aref witness (- witness-length 1)))
+           (witness-script-length (length witness-script-data))
+           (witness-script-bytes
+            (ironclad:with-octet-output-stream (stream)
+              (write-varint witness-script-length stream)
+              (write-bytes witness-script-data stream witness-script-length)))
+           (witness-program
+            (command-payload (aref (script-commands script-pubkey) 1))))
+      (when (not (equalp (sha256 witness-script-data) witness-program))
+        (error "P2WSH error: hash mismatch."))
+      (ironclad:with-octet-input-stream (stream witness-script-bytes)
         (execute-script (parse 'script stream) :state state)))))
+
+(defun script-sigversion (script)
+  "For non-SegWit transactions, signature version is represented as
+constant :BASE, and for SegWit ones - :WITNESS-V<N>, where N is the
+first op of the witness script pubkey."
+  (if (segwit-p script)
+      (ecase (command-op (aref (script-commands script) 0))
+        (0 :witness-v0))
+      :base))
 
 (defun execute-scripts (script-sig script-pubkey &key state)
   "Execute SCRIPT-SIG and SCRIPT-PUBKEY in succession, preserving the
 stack and performing the special rule detection (P2SH, SegWit)."
   (let ((state (or state (make-script-state))))
-    (when (execute-script script-sig :state state)
-      (cond
-        ((p2sh-p script-pubkey)
-         (p2sh state script-pubkey))
-        (t
-         (execute-script script-pubkey :state state))))))
+    ;; Execute SCRIPT-SIG - it doen't have to leave the stack in
+    ;; non-false state, so we ignore the value.
+    (execute-script script-sig :state state)
+    ;; This is correct for all types of scripts except P2SH. Will be
+    ;; overwritten in EXECUTE-P2SH.
+    (setf (@sigversion state) (script-sigversion script-pubkey))
+    (cond
+      ((p2sh-p script-pubkey)
+       (execute-p2sh script-pubkey :state state))
+      ((p2wpkh-p script-pubkey)
+       (execute-p2wpkh script-pubkey :state state))
+      ((p2wsh-p script-pubkey)
+       (execute-p2wsh script-pubkey :state state))
+      (t
+       (execute-script script-pubkey :state state)))))
 
 ;;;-----------------------------------------------------------------------------
 ;;; Operation definitions
@@ -316,8 +425,7 @@ OP-HEX-CODE is ignored and used only for documentation purposes."
        ,doc
        ,@(or body
              `((declare (ignore state))
-               (warn "Operation ~a not implemented." ',op-name)
-               nil)))
+               (error "Operation ~a not implemented." ',op-name))))
      (register-opcode ,op-code ',op-name (symbol-function ',op-name))))
 
 (defmacro define-opcode-alias (new-op-name old-op-name)
@@ -332,8 +440,7 @@ OP-HEX-CODE is ignored and used only for documentation purposes."
   `(define-opcode ,op-name ,op-code ,op-hex-code (,@args)
      ,doc
      (declare (ignore state))
-     (warn "Opcode is disabled.")
-     nil))
+     (error "Opcode is disabled.")))
 
 (defmacro define-opcode-range ((op-name-prefix op-name-start op-name-end)
                                (op-code-start op-code-end)
