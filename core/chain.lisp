@@ -5,13 +5,16 @@
         :bp/core/transaction
         :bp/core/encoding)
   (:export
+   ;; Chain supplier API:
    #:with-chain-supplier
    #:chain-get-block-hash
    #:chain-get-block
    #:chain-get-transaction
    #:get-block-hash
    #:get-block
-   #:get-transaction))
+   #:get-transaction
+   ;; Available chain suppliers:
+   #:node-connection))
 
 (require :aserve)
 
@@ -26,13 +29,19 @@
 
 (defgeneric chain-get-block-hash (supplier height)
   (:documentation "Get the hash of the block from SUPPLIER by its
-  HEIGHT in the chain."))
+HEIGHT in the chain. HEIGHT must be an integer."))
 
-(defgeneric chain-get-block (supplier hash)
-  (:documentation "Get raw block data from SUPPLIER by its HASH."))
+(defgeneric chain-get-block (supplier hash &key encoded)
+  (:documentation "Get raw block data from SUPPLIER by its HASH. HASH
+can be either a hex-encoded string or a byte array. If ENCODED is
+non-NIL, returns a hex-encoded string, otherwise returns CBLOCK
+object."))
 
-(defgeneric chain-get-transaction (supplier id)
-  (:documentation "Get raw transaction data from SUPPLIER by its ID."))
+(defgeneric chain-get-transaction (supplier id &key encoded)
+  (:documentation "Get raw transaction data from SUPPLIER by its
+ID. ID can be either a hex-encoded string or a byte array. If ENCODED
+is non-NIL, returns a hex-encoded string, otherwise returns TX
+object."))
 
 
 (defclass node-connection (chain-supplier)
@@ -73,38 +82,36 @@
 (defmethod chain-get-block-hash ((supplier node-connection) height)
   (do-simple-rpc-call supplier "getblockhash" height))
 
-(defmethod chain-get-block ((supplier node-connection) hash)
+(defmethod chain-get-block ((supplier node-connection) hash &key encoded)
   ;; Second argument (0) tells Bitcoin RPC handler to return raw
   ;; hex-encoded block.
-  (let ((hash (if (stringp hash) hash (to-hex (reverse hash)))))
-    (decode 'cblock (do-simple-rpc-call supplier "getblock" hash 0))))
+  (let* ((hash (if (stringp hash) hash (to-hex (reverse hash))))
+         (hex-block (do-simple-rpc-call supplier "getblock" hash 0)))
+    (if encoded
+        hex-block
+        (decode 'cblock hex-block))))
 
-(defmethod chain-get-transaction ((supplier node-connection) id)
-  (let ((id (if (stringp id) id (to-hex (reverse id)))))
-   (decode 'tx (do-simple-rpc-call supplier "getrawtransaction" id))))
+(defmethod chain-get-transaction ((supplier node-connection) id &key encoded)
+  (let* ((id (if (stringp id) id (to-hex (reverse id))))
+         (hex-tx (do-simple-rpc-call supplier "getrawtransaction" id)))
+    (if encoded
+        hex-tx
+        (decode 'tx hex-tx))))
 
 
 
 (defvar *chain-supplier* nil
   "Global chain supplier bound by the WITH-CHAIN-SUPPLIER context manager.")
 
-(defmacro with-chain-supplier ((&key network
-                                     url
-                                     username
-                                     password)
-                               &body body)
-  `(let ((*chain-supplier* (make-instance 'node-connection
-                                          :network ,network
-                                          :url ,url
-                                          :username ,username
-                                          :password ,password)))
+(defmacro with-chain-supplier ((type &rest args &key &allow-other-keys) &body body)
+  `(let ((*chain-supplier* (make-instance ',type ,@args)))
      ,@body))
 
 (defun get-block-hash (height)
   (chain-get-block-hash *chain-supplier* height))
 
-(defun get-block (hash)
-  (chain-get-block *chain-supplier* hash))
+(defun get-block (hash &key encoded)
+  (chain-get-block *chain-supplier* hash :encoded encoded))
 
-(defun get-transaction (id)
-  (chain-get-transaction *chain-supplier* id))
+(defun get-transaction (id &key encoded)
+  (chain-get-transaction *chain-supplier* id :encoded encoded))

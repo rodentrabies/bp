@@ -67,11 +67,21 @@ allow to pull chain data from any external supplier specified with the
 `bp:with-chain-supplier` macro:
 
 ``` cl
-CL-USER> (bp:with-chain-supplier (:url      "http://localhost:8332"
+CL-USER> (bp:with-chain-supplier (bp:node-connection
+                                  :url "http://localhost:8332"
                                   :username "btcuser"
                                   :password "btcpassword")
            (bp:get-transaction "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098"))
 #<BP/CORE/TRANSACTION:TX 0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098>
+```
+
+Non-`nil` keyword argument `:encoded` can be used with `bp:get-block`
+and `bp:get-transaction` to return serialized transaction hex-encoded
+in a string:
+
+``` cl
+CL-USER> (bp:get-transaction "14...c3" :encoded t)
+"010000000...ae00000000"
 ```
 
 Under the hood, these operations call corresponding generic functions
