@@ -1,6 +1,10 @@
 (uiop:define-package :bp/crypto/secp256k1 (:use :cl :cffi :ironclad)
   (:use :bp/crypto/random)
   (:nicknames :secp256k1)
+  (:shadow
+   ;; Ironclad's symbols
+   #:make-signature
+   #:verify-signature)
   (:export
    ;; Signature API
    #:ecdsa-sign

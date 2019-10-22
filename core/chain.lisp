@@ -1,5 +1,5 @@
 (uiop:define-package :bp/core/chain (:use :cl)
-  ;; (:import-from :net.aserve.client)
+  (:import-from :aserve)
   (:import-from :jsown)
   (:use :bp/core/block
         :bp/core/transaction
@@ -15,8 +15,6 @@
    #:get-transaction
    ;; Available chain suppliers:
    #:node-connection))
-
-(require :aserve)
 
 (in-package :bp/core/chain)
 
