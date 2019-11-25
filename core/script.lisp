@@ -152,9 +152,26 @@ the best effort to detect/convert the provided values."
   discard
   stack
   altstack
+  conditions
   witness
   sighashf
   sigversion)
+
+(defun @execp (state op)
+  "A command is considered executable if current branch is an
+executable one (i.e. the current code path does not contain false
+conditions), or it is a branching command.
+
+For this purpose, OP_IF pushes its condition to CONDITIONS stack in
+script state (OP_NOTIF pushes an inverted condition), OP_ELSE inverts
+the top condition in CONDITIONS, while OP_ENDIF simply pops the top
+condition. For OP_ELSE/OP_ENDIF commands, empty CONDITIONS stack means
+that the branching construction is unbalanced.
+
+This follows the implementation of script interpreter in Bitcoin
+Core."
+  (or (not (member nil (@conditions state)))
+      (<= (opcode :op_if) op (opcode :op_endif))))
 
 (defun @sighash (state hashtype)
   (let* ((prefix     (reverse (@discard state)))
@@ -242,19 +259,24 @@ the best effort to detect/convert the provided values."
   (let ((state (or state (make-script-state))))
     (setf (@commands state) (coerce (script-commands script) 'list))
     (setf (@discard state) nil)
+    (setf (@conditions state) nil)
     (loop
        :for command := (pop (@commands state))
        :while command
        :for op := (command-op command)
        :for payload := (command-payload command)
        :for op-function := (nth-value 1 (opcode op))
+       ;; Check if current branch is executable.
+       :for execp := (@execp state op)
        ;; Save current command in the discard to be able to compute
        ;; the hashcode.
        :do (push command (@discard state))
        ;; When *TRACE-SCRIPT-EXECUTION* dynamic variable is true,
        ;; print the current step of script execution.
-       :when *trace-script-execution*
+       :when (and *trace-script-execution* execp)
        :do (print-script-execution-state command state)
+       ;; Execute command only if current branch is executable.
+       :when execp
        ;; Non-push command.
        :if (null payload)
        :do
@@ -264,7 +286,8 @@ the best effort to detect/convert the provided values."
        :else
        :do
          (push payload (@stack state)))
-    (values (and (not (zerop (length (@stack state))))
+    (values (and (not (@conditions state))
+                 (not (zerop (length (@stack state))))
                  (not (equalp (first (@stack state)) #())))
             (mapcar #'decode-integer (@stack state)))))
 
@@ -513,26 +536,44 @@ the stack in little endian order."
 
 (define-opcode op_if 99 #x63 (state)
   "If the top stack value is not False, the statements are
-executed. The top stack value is removed.")
+executed. The top stack value is removed. See @EXECP for more details
+on how branching works."
+  (when (>= (length (@stack state)) 1)
+    (let ((condition (decode-integer (pop (@stack state)))))
+      (push (not (= condition 0)) (@conditions state)))
+    t))
 
 (define-opcode op_notif 100 #x64 (state)
   "If the top stack value is False, the statements are executed. The
-top stack value is removed.")
+top stack value is removed. See @EXECP for more details on how
+branching works."
+  (when (>= (length (@stack state)) 1)
+    (let ((condition (decode-integer (pop (@stack state)))))
+      (push (= condition 0) (@conditions state)))
+    t))
 
 (define-opcode op_else 103 #x67 (state)
   "If the preceding OP_IF or OP_NOTIF or OP_ELSE was not executed then
 these statements are and if the preceding OP_IF or OP_NOTIF or OP_ELSE
-was executed then these statements are not.")
+was executed then these statements are not. See @EXECP for more
+details on how branching works."
+  (when (@conditions state)
+    (push (not (pop (@conditions state))) (@conditions state))
+    t))
 
 (define-opcode op_endif 104 #x68 (state)
   "Ends an if/else block. All blocks must end, or the transaction is
-invalid. An OP_ENDIF without OP_IF earlier is also invalid.")
+invalid. An OP_ENDIF without OP_IF earlier is also invalid. See @EXECP
+for more details on how branching works."
+  (when (@conditions state)
+    (pop (@conditions state))
+    t))
 
 (define-opcode op_verify 105 #x69 (state)
   "Marks transaction as invalid if top stack value is not true. The
 top stack value is removed."
   (when (>= (length (@stack state)) 1)
-    (= (decode-integer (pop (@stack state))) 1)))
+    (/= (decode-integer (pop (@stack state))) 0)))
 
 (define-opcode op_return 106 #x6a (state)
   "Marks transaction as invalid. Since bitcoin 0.9, a standard way of
