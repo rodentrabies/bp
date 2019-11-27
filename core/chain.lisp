@@ -27,19 +27,20 @@
 
 (defgeneric chain-get-block-hash (supplier height)
   (:documentation "Get the hash of the block from SUPPLIER by its
-HEIGHT in the chain. HEIGHT must be an integer."))
+HEIGHT in the chain. HEIGHT must be an integer. If there is no known
+block at the given HEIGHT, return NIL."))
 
 (defgeneric chain-get-block (supplier hash &key encoded)
   (:documentation "Get raw block data from SUPPLIER by its HASH. HASH
 can be either a hex-encoded string or a byte array. If ENCODED is
 non-NIL, returns a hex-encoded string, otherwise returns CBLOCK
-object."))
+object. If there is no block with the given HASH, return NIL."))
 
 (defgeneric chain-get-transaction (supplier id &key encoded)
   (:documentation "Get raw transaction data from SUPPLIER by its
 ID. ID can be either a hex-encoded string or a byte array. If ENCODED
 is non-NIL, returns a hex-encoded string, otherwise returns TX
-object."))
+object. If there is no transaction with a given ID, return NIL."))
 
 
 (defclass node-connection (chain-supplier)
@@ -52,6 +53,30 @@ object."))
    (password
     :accessor node-connection-password
     :initarg :password)))
+
+(define-condition node-connection-error (simple-error)
+  ((code
+    :initarg :code
+    :reader node-connection-error-code)
+   (message
+    :initarg :message
+    :reader node-connection-error-message))
+  (:report
+   (lambda (e s)
+     (let ((code (node-connection-error-code e))
+           (message (node-connection-error-message e)))
+       (format s "Node connection error: HTTP status ~a~@[ (~a)~]"
+               code
+               (when (plusp (length message)) message))))))
+
+(define-condition rpc-error (node-connection-error)
+  ()
+  (:report
+   (lambda (e s)
+     (let ((code (node-connection-error-code e))
+           (message (node-connection-error-message e)))
+       (format s "Node connection error: RPC code ~a (~a)"
+               code message)))))
 
 (defun do-simple-rpc-call (supplier method &rest arguments)
   (let* ((user (node-connection-username supplier))
@@ -73,28 +98,44 @@ object."))
           :method :post
           :content content
           :content-type "text/plain")
-      (if (= status 200)
-          (jsown:val (jsown:parse response) "result")
-          (error "RPC call status ~a: ~a" status response)))))
+      (cond ((= status 200)
+             (jsown:val (jsown:parse response) "result"))
+            ((= status 500)
+             (let* ((errorinfo (jsown:val (jsown:parse response) "error"))
+                    (code (jsown:val errorinfo "code"))
+                    (message (jsown:val errorinfo "message")))
+               (error 'rpc-error :code code :message message)))
+            (t
+             (error 'node-connection-error :code status :message response))))))
+
+(defmacro ignore-rpc-errors (&body body)
+  `(handler-case
+       (progn ,@body)
+     (rpc-error (e)
+       (values nil e))))
 
 (defmethod chain-get-block-hash ((supplier node-connection) height)
-  (do-simple-rpc-call supplier "getblockhash" height))
+  (ignore-rpc-errors
+    (do-simple-rpc-call supplier "getblockhash" height)))
 
 (defmethod chain-get-block ((supplier node-connection) hash &key encoded)
   ;; Second argument (0) tells Bitcoin RPC handler to return raw
   ;; hex-encoded block.
-  (let* ((hash (if (stringp hash) hash (to-hex (reverse hash))))
-         (hex-block (do-simple-rpc-call supplier "getblock" hash 0)))
-    (if encoded
-        hex-block
-        (decode 'cblock hex-block))))
+  (ignore-rpc-errors
+    (let* ((hash (if (stringp hash) hash (to-hex (reverse hash))))
+           (hex-block
+            (do-simple-rpc-call supplier "getblock" hash 0)))
+      (if encoded
+          hex-block
+          (decode 'cblock hex-block)))))
 
 (defmethod chain-get-transaction ((supplier node-connection) id &key encoded)
-  (let* ((id (if (stringp id) id (to-hex (reverse id))))
-         (hex-tx (do-simple-rpc-call supplier "getrawtransaction" id)))
-    (if encoded
-        hex-tx
-        (decode 'tx hex-tx))))
+  (ignore-rpc-errors
+    (let* ((id (if (stringp id) id (to-hex (reverse id))))
+           (hex-tx (do-simple-rpc-call supplier "getrawtransaction" id)))
+      (if encoded
+          hex-tx
+          (decode 'tx hex-tx)))))
 
 
 
