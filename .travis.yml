@@ -24,6 +24,7 @@ matrix:
     - env: LISP=clisp
     - env: LISP=clisp32 LISP32=1
     - env: LISP=ecl
+    - env: LISP=ccl32   LISP32=1
 
 install:
   # Install libsecp256k1.

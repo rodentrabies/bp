@@ -13,10 +13,21 @@
    #:get-block-hash
    #:get-block
    #:get-transaction
-   ;; Available chain suppliers:
+   ;; Chain supplier conditions:
+   #:unknown-entity-error
+   #:unknown-block-hash-error
+   #:unknown-block-error
+   #:unknown-transaction-error
+   ;; Available chain suppliers/mixins:
+   #:chain-supplier
+   #:chain-supplier-encoded-mixin
    #:node-connection))
 
 (in-package :bp/core/chain)
+
+
+;;;-----------------------------------------------------------------------------
+;;; Generic declarations
 
 (defclass chain-supplier ()
   ((network
@@ -25,25 +36,96 @@
     :initform :mainnet
     :documentation "Network marker (one of :MAINNET, :TESTNET, :REGTEST).")))
 
-(defgeneric chain-get-block-hash (supplier height)
+(define-condition unknown-entity-error (simple-error)
+  ())
+
+(define-condition unknown-block-hash-error (unknown-entity-error)
+  ((height
+    :initarg :height
+    :accessor unknown-block-height))
+  (:report
+   (lambda (e s)
+     (format s "Unknown block at height ~a." (unknown-block-height e)))))
+
+(define-condition unknown-block-error (unknown-entity-error)
+  ((hash
+    :initarg :hash
+    :accessor unknown-block-hash))
+  (:report
+   (lambda (e s)
+     (format s "Unknown block ~a." (unknown-block-hash e)))))
+
+(define-condition unknown-transaction-error (unknown-entity-error)
+  ((id
+    :initarg :id
+    :accessor unknown-transaction-id))
+  (:report
+   (lambda (e s)
+     (format s "Unknown transaction ~a." (unknown-transaction-id e)))))
+
+(defgeneric chain-get-block-hash (supplier height &key errorp)
   (:documentation "Get the hash of the block from SUPPLIER by its
 HEIGHT in the chain. HEIGHT must be an integer. If there is no known
-block at the given HEIGHT, return NIL."))
+block at the given HEIGHT, return NIL or signal an
+UNKNOWN-BLOCK-HASH-ERROR error, depending on the ERRORP value."))
 
-(defgeneric chain-get-block (supplier hash &key encoded)
+(defgeneric chain-get-block (supplier hash &key encoded errorp)
   (:documentation "Get raw block data from SUPPLIER by its HASH. HASH
 can be either a hex-encoded string or a byte array. If ENCODED is
 non-NIL, returns a hex-encoded string, otherwise returns CBLOCK
-object. If there is no block with the given HASH, return NIL."))
+object. If there is no block with the given HASH, return NIL or signal
+an UNKNOWN-BLOCK-ERROR error, depending on the ERRORP value."))
 
-(defgeneric chain-get-transaction (supplier id &key encoded)
+(defgeneric chain-get-transaction (supplier id &key encoded errorp)
   (:documentation "Get raw transaction data from SUPPLIER by its
 ID. ID can be either a hex-encoded string or a byte array. If ENCODED
 is non-NIL, returns a hex-encoded string, otherwise returns TX
-object. If there is no transaction with a given ID, return NIL."))
+object. If there is no transaction with a given ID, return NIL or
+signal an UNKNOWN-TRANSACTION-ERROR error, depending on the ERRORP
+value."))
 
 
-(defclass node-connection (chain-supplier)
+;;;-----------------------------------------------------------------------------
+;;; Hex-encoded chain supplier mixin
+
+(defclass chain-supplier-encoded-mixin ()
+  ()
+  (:documentation "A mixin that provides a common normalization,
+encoding and decoding logic for chain suppliers that are handling
+hex-encoded input/output."))
+
+(defmethod chain-get-block-hash :around ((supplier chain-supplier-encoded-mixin)
+                                         height &key errorp)
+  (or (call-next-method supplier height)
+      (and errorp (error 'unknown-block-hash-error :height height))))
+
+(defmethod chain-get-block :around ((supplier chain-supplier-encoded-mixin)
+                                    hash &key encoded errorp)
+  (let* ((hash (if (stringp hash) hash (to-hex (reverse hash))))
+         (hex-block (call-next-method supplier hash :encoded t)))
+    (cond ((and hex-block encoded)
+           hex-block)
+          (hex-block
+           (decode 'cblock hex-block))
+          (errorp
+           (error 'unknown-block-error :hash hash)))))
+
+(defmethod chain-get-transaction :around ((supplier chain-supplier-encoded-mixin)
+                                          id &key encoded errorp)
+  (let* ((id (if (stringp id) id (to-hex (reverse id))))
+         (hex-tx (call-next-method supplier id :encoded t)))
+    (cond ((and hex-tx encoded)
+           hex-tx)
+          (hex-tx
+           (decode 'tx hex-tx))
+          (errorp
+           (error 'unknown-transaction-error :id id)))))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Node-connection chain supplier implementation
+
+(defclass node-connection (chain-supplier chain-supplier-encoded-mixin)
   ((url
     :accessor node-connection-url
     :initarg :url)
@@ -114,30 +196,26 @@ object. If there is no transaction with a given ID, return NIL."))
      (rpc-error (e)
        (values nil e))))
 
-(defmethod chain-get-block-hash ((supplier node-connection) height)
+(defmethod chain-get-block-hash ((supplier node-connection) height &key errorp)
+  (declare (ignore errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
   (ignore-rpc-errors
     (do-simple-rpc-call supplier "getblockhash" height)))
 
-(defmethod chain-get-block ((supplier node-connection) hash &key encoded)
-  ;; Second argument (0) tells Bitcoin RPC handler to return raw
-  ;; hex-encoded block.
+(defmethod chain-get-block ((supplier node-connection) hash &key encoded errorp)
+  (declare (ignore encoded errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
   (ignore-rpc-errors
-    (let* ((hash (if (stringp hash) hash (to-hex (reverse hash))))
-           (hex-block
-            (do-simple-rpc-call supplier "getblock" hash 0)))
-      (if encoded
-          hex-block
-          (decode 'cblock hex-block)))))
+    ;; Second argument (0) tells Bitcoin RPC handler to return raw
+    ;; hex-encoded block.
+    (do-simple-rpc-call supplier "getblock" hash 0)))
 
-(defmethod chain-get-transaction ((supplier node-connection) id &key encoded)
+(defmethod chain-get-transaction ((supplier node-connection) id &key encoded errorp)
+  (declare (ignore encoded errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
   (ignore-rpc-errors
-    (let* ((id (if (stringp id) id (to-hex (reverse id))))
-           (hex-tx (do-simple-rpc-call supplier "getrawtransaction" id)))
-      (if encoded
-          hex-tx
-          (decode 'tx hex-tx)))))
+    (do-simple-rpc-call supplier "getrawtransaction" id)))
 
 
+;;;-----------------------------------------------------------------------------
+;;; Context-dependent API
 
 (defvar *chain-supplier* nil
   "Global chain supplier bound by the WITH-CHAIN-SUPPLIER context manager.")
@@ -146,11 +224,11 @@ object. If there is no transaction with a given ID, return NIL."))
   `(let ((*chain-supplier* (make-instance ',type ,@args)))
      ,@body))
 
-(defun get-block-hash (height)
-  (chain-get-block-hash *chain-supplier* height))
+(defun get-block-hash (height &key errorp)
+  (chain-get-block-hash *chain-supplier* height :errorp errorp))
 
-(defun get-block (hash &key encoded)
-  (chain-get-block *chain-supplier* hash :encoded encoded))
+(defun get-block (hash &key encoded errorp)
+  (chain-get-block *chain-supplier* hash :encoded encoded :errorp errorp))
 
-(defun get-transaction (id &key encoded)
-  (chain-get-transaction *chain-supplier* id :encoded encoded))
+(defun get-transaction (id &key encoded errorp)
+  (chain-get-transaction *chain-supplier* id :encoded encoded :errorp errorp))

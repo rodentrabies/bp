@@ -54,17 +54,17 @@
       (write-byte #x01 stream)) ;; write SegWit flag
     (write-varint num-inputs stream)
     (loop
-       :for i :below num-inputs
-       :do (serialize (aref inputs i) stream))
+      :for i :below num-inputs
+      :do (serialize (aref inputs i) stream))
     (write-varint num-outputs stream)
     (loop
-       :for i :below num-outputs
-       :do (serialize (aref outputs i) stream))
+      :for i :below num-outputs
+      :do (serialize (aref outputs i) stream))
     (when witnesses
       (loop
-         ;; Witness array length equals to input array length.
-         :for i :below num-inputs
-         :do (serialize (aref witnesses i) stream)))
+        ;; Witness array length equals to input array length.
+        :for i :below num-inputs
+        :do (serialize (aref witnesses i) stream)))
     (write-int locktime stream :size 4 :byte-order :little)))
 
 (defun read-num-inputs-or-segwit-flag (stream)
@@ -145,7 +145,7 @@ serialization including witness structures."
   (aref (tx-inputs tx) index))
 
 (defun tx-witness (tx index)
-  "Return INDEXth witness of the given transaction, if it is a SegWit
+  "Return INDEXth witness of the given transaction if it is a SegWit
 transaction, otherwise return NIL."
   (when (tx-witnesses tx)
     (aref (tx-witnesses tx) index)))

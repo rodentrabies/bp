@@ -215,49 +215,52 @@ spec at https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki)."
     (:witness-v0
      (tx-sighash-witness-v0 tx txin-index amount script-code sighash-type))))
 
+(defun get-transaction-output (id index)
+  "TODO: maybe make this part of chain supplier API."
+  (let ((prev-tx (get-transaction id :errorp t)))
+    (when prev-tx
+      (if (>= index (length (tx-outputs prev-tx)))
+          (error "Unknown previous output ~a:~a." (tx-id prev-tx) index)
+          (tx-output prev-tx index)))))
+
 (defmethod validate ((tx tx) &key)
   (flet ((%txin-amount (input)
-           (let ((prev-tx (get-transaction (txin-previous-tx-id input)))
-                 (prev-tx-index (txin-previous-tx-index input)))
-             (unless prev-tx
-               (error "Unknown previous transaction."))
-             (unless (< prev-tx-index (length (tx-outputs prev-tx)))
-               (error "Unknown previous output."))
-             (txout-amount (tx-output prev-tx prev-tx-index)))))
+           (txout-amount
+            (get-transaction-output
+             (txin-previous-tx-id input)
+             (txin-previous-tx-index input)))))
     (unless (>= (apply #'+ (map 'list #'%txin-amount (tx-inputs tx)))
                 (apply #'+ (map 'list #'txout-amount (tx-outputs tx))))
       (error "Output total is larger then input total."))
     (loop
-       :for txout-index :below (length (tx-outputs tx))
-       :do (validate (tx-output tx txout-index)))
+      :for txout-index :below (length (tx-outputs tx))
+      :do (validate (tx-output tx txout-index)))
     (loop
-       :for txin-index :below (length (tx-inputs tx))
-       :do (validate
-            (tx-input tx txin-index)
-            :tx tx :txin-index txin-index))
+      :for txin-index :below (length (tx-inputs tx))
+      :do (validate
+           (tx-input tx txin-index)
+           :tx tx :txin-index txin-index))
     t))
 
 (defmethod validate ((txin txin) &key tx txin-index)
-  (let ((prev-tx (get-transaction (txin-previous-tx-id txin)))
-        (prev-tx-index (txin-previous-tx-index txin)))
-    (unless prev-tx
-      (error "Unknown previous transaction."))
-    (unless (< prev-tx-index (length (tx-outputs prev-tx)))
-      (error "Unknown previous output."))
-    (let* ((prevout (tx-output prev-tx prev-tx-index))
-           (script-pubkey (txout-script-pubkey prevout))
-           (amount (txout-amount prevout))
-           (script-sig (txin-script-sig txin))
-           (witness (tx-witness tx txin-index))
-           (sighashf
-            (lambda (script-code sighash-type sigversion)
-              (tx-sighash tx txin-index amount script-code sighash-type sigversion)))
-           (script-state
-            (make-script-state
-             :witness (when witness (witness-items witness))
-             :sighashf sighashf)))
-      (unless (execute-scripts script-sig script-pubkey :state script-state)
-        (error "Script execution failed.")))
+  (let* ((prev-out
+           (get-transaction-output
+            (txin-previous-tx-id txin)
+            (txin-previous-tx-index txin)))
+         (script-pubkey (txout-script-pubkey prev-out))
+         (amount (txout-amount prev-out))
+         (script-sig (txin-script-sig txin))
+         (witness (tx-witness tx txin-index))
+         (sighashf
+           (lambda (script-code sighash-type sigversion)
+             (tx-sighash
+              tx txin-index amount script-code sighash-type sigversion)))
+         (script-state
+           (make-script-state
+            :witness (when witness (witness-items witness))
+            :sighashf sighashf)))
+    (unless (execute-scripts script-sig script-pubkey :state script-state)
+      (error "Script execution failed."))
     t))
 
 (defmethod validate ((txout txout) &key)
