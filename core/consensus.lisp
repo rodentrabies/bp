@@ -7,7 +7,8 @@
         :bp/crypto/hash)
   (:export
    #:validate
-   #:validp))
+   #:validp
+   #:validation-context))
 
 (in-package :bp/core/consensus)
 
@@ -34,13 +35,43 @@
 ;;;-----------------------------------------------------------------------------
 ;;; Validation API
 
-(defgeneric validate (entity &key &allow-other-keys)
+(defgeneric validate (entity &key context)
   (:documentation "Validate entity according to the Bitcoin Protocol
 consensus rules, throw an error if an entity is invalid for any reason."))
 
-(defun validp (entity &rest context &key &allow-other-keys)
+(defun validp (entity &key context)
   "Return T if the ENTITY is valid, NIL otherwise."
   (ignore-errors (apply #'validate entity context)))
+
+(defclass validation-context ()
+  ((height      :initarg :height      :accessor @height      :initform nil)
+   (cblock      :initarg :block       :accessor @block       :initform nil)
+   (tx          :initarg :tx          :accessor @tx          :initform nil)
+   (tx-index    :initarg :tx-index    :accessor @tx-index    :initform nil)
+   (txin        :initarg :txin        :accessor @txin        :initform nil)
+   (txin-index  :initarg :txin-index  :accessor @txin-index  :initform nil)
+   (txout       :initarg :txout       :accessor @txout       :initform nil)
+   (txout-index :initarg :txout-index :accessor @txout-index :initform nil))
+  (:documentation "Structure for storing additional information needed
+during entity validation."))
+
+(defun ensure-validation-context (context)
+  (or context (make-instance 'validation-context)))
+
+(defun extend-validation-context (context &key height block tx tx-index txin
+                                            txin-index txout txout-index)
+  "Create a new VALIDATION-CONTEXT object from the given one and
+extend it with additional data if supplied."
+  (make-instance
+   'validation-context
+   :height      (or height      (@height context))
+   :block       (or block       (@block context))
+   :tx          (or tx          (@tx context))
+   :tx-index    (or tx-index    (@tx-index context))
+   :txin        (or txin        (@txin context))
+   :txin-index  (or txin-index  (@txin-index context))
+   :txout       (or txout       (@txout context))
+   :txout-index (or txout-index (@txout-index context))))
 
 
 ;;;-----------------------------------------------------------------------------
@@ -68,7 +99,8 @@ consensus rules, throw an error if an entity is invalid for any reason."))
      (/ (ironclad:octets-to-integer max-target :big-endian nil)
         (ironclad:octets-to-integer current-target :big-endian nil)))))
 
-(defmethod validate ((block-header block-header) &key)
+(defmethod validate ((block-header block-header) &key context)
+  (declare (ignore context))
   (unless (< (ironclad:octets-to-integer
               (block-hash block-header) :big-endian nil)
              (ironclad:octets-to-integer
@@ -76,7 +108,8 @@ consensus rules, throw an error if an entity is invalid for any reason."))
     (error "Block hash does not satisfy Proof-of-Work target."))
   t)
 
-(defmethod validate ((cblock cblock) &key)
+(defmethod validate ((cblock cblock) &key context)
+  (declare (ignore context))
   ;; TODO: validate transactions and merkle root
   (validate (block-header cblock))
   t)
@@ -223,47 +256,56 @@ spec at https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki)."
           (error "Unknown previous output ~a:~a." (tx-id prev-tx) index)
           (tx-output prev-tx index)))))
 
-(defmethod validate ((tx tx) &key)
-  (flet ((%txin-amount (input)
-           (txout-amount
-            (get-transaction-output
-             (txin-previous-tx-id input)
-             (txin-previous-tx-index input)))))
-    (unless (>= (apply #'+ (map 'list #'%txin-amount (tx-inputs tx)))
-                (apply #'+ (map 'list #'txout-amount (tx-outputs tx))))
-      (error "Output total is larger then input total."))
-    (loop
-      :for txout-index :below (length (tx-outputs tx))
-      :do (validate (tx-output tx txout-index)))
-    (loop
-      :for txin-index :below (length (tx-inputs tx))
-      :do (validate
-           (tx-input tx txin-index)
-           :tx tx :txin-index txin-index))
-    t))
+(defmethod validate ((tx tx) &key context)
+  (let ((context (ensure-validation-context context)))
+    (flet ((%txin-amount (input)
+             (txout-amount
+              (get-transaction-output
+               (txin-previous-tx-id input)
+               (txin-previous-tx-index input)))))
+      (unless (>= (apply #'+ (map 'list #'%txin-amount (tx-inputs tx)))
+                  (apply #'+ (map 'list #'txout-amount (tx-outputs tx))))
+        (error "Output total is larger then input total."))
+      (loop
+         :for txout-index :below (length (tx-outputs tx))
+         :for txout-context
+           := (extend-validation-context context :tx tx :txout-index txout-index)
+         :do (validate (tx-output tx txout-index) :context txout-context))
+      (loop
+         :for txin-index :below (length (tx-inputs tx))
+         :for txin-context
+           := (extend-validation-context context :tx tx :txin-index txin-index)
+         :do (validate (tx-input tx txin-index) :context txin-context))
+      t)))
 
-(defmethod validate ((txin txin) &key tx txin-index)
-  (let* ((prev-out
-           (get-transaction-output
-            (txin-previous-tx-id txin)
-            (txin-previous-tx-index txin)))
+(defmethod validate ((txin txin) &key context)
+  (let* ((context (ensure-validation-context context))
+         (prev-out
+          (get-transaction-output
+           (txin-previous-tx-id txin)
+           (txin-previous-tx-index txin)))
          (script-pubkey (txout-script-pubkey prev-out))
          (amount (txout-amount prev-out))
          (script-sig (txin-script-sig txin))
-         (witness (tx-witness tx txin-index))
+         (witness (tx-witness (@tx context) (@txin-index context)))
          (sighashf
-           (lambda (script-code sighash-type sigversion)
-             (tx-sighash
-              tx txin-index amount script-code sighash-type sigversion)))
+          (lambda (script-code sighash-type sigversion)
+            (tx-sighash (@tx context)
+                        (@txin-index context)
+                        amount
+                        script-code
+                        sighash-type
+                        sigversion)))
          (script-state
-           (make-script-state
-            :witness (when witness (witness-items witness))
-            :sighashf sighashf)))
+          (make-script-state
+           :witness (when witness (witness-items witness))
+           :sighashf sighashf)))
     (unless (execute-scripts script-sig script-pubkey :state script-state)
       (error "Script execution failed."))
     t))
 
-(defmethod validate ((txout txout) &key)
+(defmethod validate ((txout txout) &key context)
+  (declare (ignore context))
   ;; Assume all txouts are valid for now.
   t)
 
