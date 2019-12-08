@@ -20,11 +20,12 @@ env:
 
 matrix:
   allow_failures:
+    - env: LISP=abcl
     - env: LISP=allegro LISP32=1
+    - env: LISP=ccl32   LISP32=1
+    - env: LISP=ecl
     - env: LISP=clisp
     - env: LISP=clisp32 LISP32=1
-    - env: LISP=ecl
-    - env: LISP=ccl32   LISP32=1
 
 install:
   # Install libsecp256k1.
@@ -41,11 +42,12 @@ install:
 script:
   # Ensure we enter a debugger on error/failure and immediately call
   # UIOP:QUIT.
-  - cl -l fiveam
+  - cl -e '(cl:in-package :cl-user)'
+       -e '(ql:quickload :bp/tests)'
        -e '(setf fiveam:*debug-on-error* t)'
        -e '(setf fiveam:*debug-on-failure* t)'
        -e '(setf *debugger-hook*
                  (lambda (c h)
                    (declare (ignore c h))
                    (uiop:quit -1)))'
-       -e '(ql:quickload :bp/tests)'
+       -e '(asdf:test-system "bp")'
