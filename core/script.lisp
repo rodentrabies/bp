@@ -5,6 +5,8 @@
    :bp/crypto/secp256k1)
   (:export
    #:script
+   #:decode-integer
+   #:encode-integer
    #:make-script
    #:make-script-state
    #:script-commands

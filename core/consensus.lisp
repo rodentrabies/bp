@@ -4,11 +4,13 @@
         :bp/core/block
         :bp/core/transaction
         :bp/core/script
+        :bp/core/constants
         :bp/crypto/hash)
   (:export
    #:validate
    #:validp
-   #:validation-context))
+   #:validation-context
+   #:make-validation-context))
 
 (in-package :bp/core/consensus)
 
@@ -55,8 +57,12 @@ consensus rules, throw an error if an entity is invalid for any reason."))
   (:documentation "Structure for storing additional information needed
 during entity validation."))
 
-(defun ensure-validation-context (context)
-  (or context (make-instance 'validation-context)))
+(defmacro ensure-validation-context ((context-sym) &body body)
+  "Ensure CONTEXT-SYM is bound to the VALIDATION-CONTEXT object before
+executing the BODY."
+  (assert (symbolp context-sym))
+  `(let ((,context-sym (or ,context-sym (make-instance 'validation-context))))
+     ,@body))
 
 (defun extend-validation-context (context &key height block tx tx-index txin
                                             txin-index txout txout-index)
@@ -248,61 +254,129 @@ spec at https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki)."
     (:witness-v0
      (tx-sighash-witness-v0 tx txin-index amount script-code sighash-type))))
 
+;; TODO: maybe make this part of chain supplier API.
 (defun get-transaction-output (id index)
-  "TODO: maybe make this part of chain supplier API."
+  "Get txout described by its transaction ID and output index.
+Will signal an error if the transaction is unknown or does not have
+the output with given index. Assumes chain supplier context."
   (let ((prev-tx (get-transaction id :errorp t)))
     (when prev-tx
       (if (>= index (length (tx-outputs prev-tx)))
           (error "Unknown previous output ~a:~a." (tx-id prev-tx) index)
           (tx-output prev-tx index)))))
 
+(defun tx-coinbase (tx)
+  "Assume transaction TX is a coinbase transaction and extract its
+coinbase field (first input). Signal error if there is more then one
+input."
+  (if (> (length (tx-inputs tx)) 1)
+      (error "Coinbase transaction must have a single input.")
+      (tx-input tx 0)))
+
+;; TODO: maybe make this part of transaction data API.
+(defun txin-amount (txin)
+  "Get the amount of the txout corresponding to the given txin.
+Assumes chain supplier context."
+  (let* ((previous-tx-id (txin-previous-tx-id txin))
+         (previous-tx-index (txin-previous-tx-index txin))
+         (previous-output (get-transaction-output previous-tx-id previous-tx-index)))
+    (txout-amount previous-output)))
+
+(defun tx-fee (tx)
+  (- (apply #'+ (map 'list #'txin-amount  (tx-inputs  tx)))
+     (apply #'+ (map 'list #'txout-amount (tx-outputs tx)))))
+
+(defun block-fee (block)
+  (apply #'+ (map 'list #'tx-fee (subseq (block-transactions block) 1))))
+
 (defmethod validate ((tx tx) &key context)
-  (let ((context (ensure-validation-context context)))
-    (flet ((%txin-amount (input)
-             (txout-amount
-              (get-transaction-output
-               (txin-previous-tx-id input)
-               (txin-previous-tx-index input)))))
-      (unless (>= (apply #'+ (map 'list #'%txin-amount (tx-inputs tx)))
-                  (apply #'+ (map 'list #'txout-amount (tx-outputs tx))))
-        (error "Output total is larger then input total."))
-      (loop
-         :for txout-index :below (length (tx-outputs tx))
-         :for txout-context
-           := (extend-validation-context context :tx tx :txout-index txout-index)
-         :do (validate (tx-output tx txout-index) :context txout-context))
-      (loop
-         :for txin-index :below (length (tx-inputs tx))
-         :for txin-context
-           := (extend-validation-context context :tx tx :txin-index txin-index)
-         :do (validate (tx-input tx txin-index) :context txin-context))
-      t)))
+  (ensure-validation-context (context)
+    (let ((coinbase-p (and (@tx-index context) (= (@tx-index context) 0))))
+      (flet (;; Total amount of all (which is one) coinbase inputs.
+             (%coinbase-in-amount ()
+               (let ((height (@height context))
+                     (block  (@block context)))
+                 (unless (and height block)
+                   (error "Block data and height required for coinbase tx validation."))
+                 (let* ((halvings (truncate (@height context) +halving-period+))
+                        (base     (truncate +initial-block-reward+ (expt 2 halvings)))
+                        (fee      (block-fee block)))
+                   (+ base fee))))
+             ;; Verify the amount restriction.
+             (%validate-amounts (in-amount out-amount)
+               (unless (>= in-amount out-amount)
+                 (error "Output total is larger then input total.")))
+             ;; Validate every output.
+             (%validate-outputs (outputs)
+               (loop
+                  :for txout-index :below (length outputs)
+                  :for txout-context
+                    := (extend-validation-context context :tx tx :txout-index txout-index)
+                  :do (validate (tx-output tx txout-index) :context txout-context)))
+             ;; Validate every input.
+             (%validate-inputs (inputs)
+               (loop
+                  :for txin-index :below (length inputs)
+                  :for txin-context
+                    := (extend-validation-context context :tx tx :txin-index txin-index)
+                  :do (validate (tx-input tx txin-index) :context txin-context))))
+        (if coinbase-p
+            (let ((in  (%coinbase-in-amount))
+                  (out (apply #'+ (map 'list #'txout-amount (tx-outputs tx)))))
+              (%validate-amounts in out)
+              (%validate-inputs (list (tx-coinbase tx))))
+            (let ((in  (apply #'+ (map 'list #'txin-amount  (tx-inputs tx))))
+                  (out (apply #'+ (map 'list #'txout-amount (tx-outputs tx)))))
+              (%validate-amounts in out)
+              (%validate-inputs (tx-inputs tx))))
+        (%validate-outputs (tx-outputs tx))
+        t))))
 
 (defmethod validate ((txin txin) &key context)
-  (let* ((context (ensure-validation-context context))
-         (prev-out
-          (get-transaction-output
-           (txin-previous-tx-id txin)
-           (txin-previous-tx-index txin)))
-         (script-pubkey (txout-script-pubkey prev-out))
-         (amount (txout-amount prev-out))
-         (script-sig (txin-script-sig txin))
-         (witness (tx-witness (@tx context) (@txin-index context)))
-         (sighashf
-          (lambda (script-code sighash-type sigversion)
-            (tx-sighash (@tx context)
-                        (@txin-index context)
-                        amount
-                        script-code
-                        sighash-type
-                        sigversion)))
-         (script-state
-          (make-script-state
-           :witness (when witness (witness-items witness))
-           :sighashf sighashf)))
-    (unless (execute-scripts script-sig script-pubkey :state script-state)
-      (error "Script execution failed."))
-    t))
+  (ensure-validation-context (context)
+    (let ((coinbase-p (and (@tx-index context) (= (@tx-index context) 0))))
+      (if coinbase-p
+          (let ((height (@height context))
+                (block  (@block context)))
+            (unless (and height block)
+              (error "Block data and height required for coinbase validation."))
+            ;; Verify BIP-0034 restriction.
+            (when (= (block-version block) #x02)
+              ;; TODO: too much details of script implementation leak here.
+              (let* ((bip34-height-command (aref (script-commands (txin-script-sig txin)) 0))
+                     (bip34-height         (decode-integer (cdr bip34-height-command))))
+                (unless (= bip34-height height)
+                  (error "BIP-0034: coinbase must include block height."))))
+            (unless (equalp (txin-previous-tx-id txin)
+                            (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0))
+              (error "Coinbase previous tx id must be 0."))
+            (unless (= (txin-previous-tx-index txin) #xffffffff)
+              (error "Coinbase previous tx index must be 0xFFFFFFFF."))
+            t)
+          ;; Regular txin.
+          (let* ((prev-out
+                  (get-transaction-output
+                   (txin-previous-tx-id txin)
+                   (txin-previous-tx-index txin)))
+                 (script-pubkey (txout-script-pubkey prev-out))
+                 (amount (txout-amount prev-out))
+                 (script-sig (txin-script-sig txin))
+                 (witness (tx-witness (@tx context) (@txin-index context)))
+                 (sighashf
+                  (lambda (script-code sighash-type sigversion)
+                    (tx-sighash (@tx context)
+                                (@txin-index context)
+                                amount
+                                script-code
+                                sighash-type
+                                sigversion)))
+                 (script-state
+                  (make-script-state
+                   :witness (when witness (witness-items witness))
+                   :sighashf sighashf)))
+            (unless (execute-scripts script-sig script-pubkey :state script-state)
+              (error "Script execution failed."))
+            t)))))
 
 (defmethod validate ((txout txout) &key context)
   (declare (ignore context))

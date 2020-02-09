@@ -6,4 +6,5 @@
    :bp/core/script
    :bp/core/block
    :bp/core/chain
+   :bp/core/constants
    :bp/core/consensus))
