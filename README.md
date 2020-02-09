@@ -148,16 +148,14 @@ t
 CL-USER> (bp:validate
           (bp:get-transaction "17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347"))
 op:       OP_PUSH22
-payload:  #(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22 69
-            55)
+payload:  #(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22 69 55)
 commands: <>
 stack:    ()
 
 op:       OP_HASH160
 payload:  -
 commands: <OP_PUSH20 OP_EQUAL>
-stack:    (#(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22
-             69 55))
+stack:    (#(0 14 a4 b4 ca 48 de b 3f ff c1 54 4 a1 ac dc 8d ba ae 22 69 55))
 
 op:       OP_PUSH20
 payload:  #(29 28 f4 3a f1 8d 2d 60 e8 a8 43 54 d 80 86 b3 5 34 13 39)
@@ -183,6 +181,29 @@ stack:    (#())
 t
 ```
 
+Validating certain entities requires additional information (block
+height, transactions index, block/transaction itself, etc), which can
+be packed into an instance of `bp:validation-context` class. For
+example, validating a coinbase transaction will fail, because the only
+transaction input it contains will have its `previous-tx-id` set to 0,
+which is invalid for regular transactions. For example, to be
+considered valid, a coinbase transaction must be the first transaction
+of its block, while the block itself is required for amount
+verification (to calculate the collected fees) and block height may be
+needed to perform the [BIP-0034][bip-0034] check, so such a
+transaction can be validated using the following form:
+
+``` cl
+CL-USER> (bp:validate
+          (bp:get-transaction "0f3601a5da2f516fa9d3f80c9bf6e530f1afb0c90da73e8f8ad0630c5483afe5")
+          :context (make-instance
+                    'bp:validation-context
+                    :tx-index 0
+                    :height 227836
+                    :block (bp:get-block "00000000000000d0dfd4c9d588d325dce4f32c1b31b7c0064cba7025a9b9adcc")))
+T
+```
+
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [asdf]: https://gitlab.common-lisp.net/asdf/asdf
 [cffi]: https://github.com/cffi/cffi
@@ -191,3 +212,4 @@ t
 [jsown]: https://github.com/madnificent/jsown
 [quicklisp]: https://www.quicklisp.org/beta
 [asdf-registry]: https://common-lisp.net/project/asdf/asdf/Configuring-ASDF-to-find-your-systems.html
+[bip-0034]: https://github.com/bitcoin/bips/blob/master/bip-0034.mediawiki
