@@ -52,6 +52,10 @@ otherwise."
           (ironclad:with-octet-output-stream (script-stream)
             (loop
                :for op :across commands
+               :if (and (consp op) (eq (car op) :unexpected_end))
+               :do
+                 (write-bytes (cdr op) script-stream (length (cdr op)))
+               :else
                :if (and (consp op) (<= (opcode :op_push1) (car op) (opcode :op_push75)))
                :do
                  (write-byte (car op) script-stream)
@@ -82,25 +86,34 @@ otherwise."
          :for op := (read-byte script-stream)
          :if (<= (opcode :op_push1) op (opcode :op_push75))
          :do
-           (let ((read-size
-                  (if (>= (+ i 1 op) script-len)
-                      (- script-len (+ i 1))
-                      op)))
-            (push (cons op (read-bytes script-stream read-size)) commands)
-            (incf i (+ 1 op)))
+           (let* ((expected-read-size op)
+                  (unexpected-end-p (> (+ i 1 expected-read-size) script-len))
+                  (read-size (min expected-read-size (- script-len i 1))))
+             (if unexpected-end-p
+                 (ironclad:with-octet-input-stream (script-stream script-bytes i) ;; hacky way to seek
+                   (push (cons :unexpected_end (read-bytes script-stream (1+ read-size))) commands))
+                 (push (cons op (read-bytes script-stream read-size)) commands))
+             (incf i (+ 1 read-size)))
          :else
          :if (<= (opcode :op_pushdata1) op (opcode :op_pushdata4))
          :do
-           (let* ((int-size (cond ((= op (opcode :op_pushdata1)) 1)
-                                  ((= op (opcode :op_pushdata2)) 2)
-                                  ((= op (opcode :op_pushdata4)) 4)))
-                  (data-size (read-int script-stream :size int-size :byte-order :little))
-                  (read-size
-                   (if (>= (+ i int-size data-size) script-len)
-                       (- script-len (+ i int-size))
-                       data-size)))
-             (push (cons op (read-bytes script-stream read-size)) commands)
-             (incf i (+ 1 int-size data-size)))
+           (let* ((expected-int-size (cond ((= op (opcode :op_pushdata1)) 1)
+                                           ((= op (opcode :op_pushdata2)) 2)
+                                           ((= op (opcode :op_pushdata4)) 4)))
+                  (unexpected-end-p (> (+ i 1 expected-int-size) script-len))
+                  (int-size (min expected-int-size (- script-len i 1))))
+             (if unexpected-end-p
+                 (ironclad:with-octet-input-stream (script-stream script-bytes i) ;; hacky way to seek
+                   (push (cons :unexpected_end (read-bytes script-stream (1+ int-size))) commands))
+                 (let* ((expected-read-size (read-int script-stream :size int-size :byte-order :little))
+                        (unexpected-end-p (> (+ i 1 int-size expected-read-size) script-len))
+                        (read-size (min expected-read-size (- script-len i 1 int-size))))
+                   (if unexpected-end-p
+                       (ironclad:with-octet-input-stream (script-stream script-bytes i) ;; hacky way to seek
+                         (push (cons :unexpected_end (read-bytes script-stream (+ 1 int-size read-size))) commands))
+                       (push (cons op (read-bytes script-stream read-size)) commands))
+                   (incf i read-size)))
+             (incf i (+ 1 int-size)))
          :else
          :do
            (push op commands)
@@ -109,9 +122,12 @@ otherwise."
 
 (defmethod print-object ((script script) stream)
   (flet ((print-command (c)
-           (if (consp c)
-               (format nil "~{~a~^/~} ~a" (opcode (car c)) (to-hex (cdr c)))
-               (format nil "~{~a~^/~}" (opcode c)))))
+           (cond ((and (consp c) (eq (car c) :unexpected_end))
+                  (format nil "UNEXPECTED_END ~a" (to-hex (cdr c))))
+                 ((consp c)
+                  (format nil "~{~a~^/~} ~a" (opcode (car c)) (to-hex (cdr c))))
+                 (t
+                  (format nil "~{~a~^/~}" (opcode c))))))
    (print-unreadable-object (script stream :type t)
      (format stream "<~{~a~^ ~}>"
              (map 'list #'print-command (script-commands script))))))
@@ -1186,10 +1202,13 @@ branch.")
   (declare (ignore state))
   t)
 
+(define-opcode-range (op_unknown 186 255) (186 255) (#xba #xff) (state)
+  "Unknown opcode. Used for handling coinbase input scripts.")
+
 ;;; Script: locktime
 
 (define-opcode op_checklocktimeverify 177 #xb1 (state)
-  "Marks transaction as invalid if the top stack item is greater than
+               "Marks transaction as invalid if the top stack item is greater than
 the transaction's nLockTime field, otherwise script evaluation
 continues as though an OP_NOP was executed. Transaction is also
 invalid if 1. the stack is empty; or 2. the top stack item is
