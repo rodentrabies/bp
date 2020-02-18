@@ -1202,13 +1202,13 @@ branch.")
   (declare (ignore state))
   t)
 
-(define-opcode-range (op_unknown 186 255) (186 255) (#xba #xff) (state)
+(define-opcode-range (op_unknown 186 252) (186 252) (#xba #xfc) (state)
   "Unknown opcode. Used for handling coinbase input scripts.")
 
 ;;; Script: locktime
 
 (define-opcode op_checklocktimeverify 177 #xb1 (state)
-               "Marks transaction as invalid if the top stack item is greater than
+  "Marks transaction as invalid if the top stack item is greater than
 the transaction's nLockTime field, otherwise script evaluation
 continues as though an OP_NOP was executed. Transaction is also
 invalid if 1. the stack is empty; or 2. the top stack item is
