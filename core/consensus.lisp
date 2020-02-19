@@ -1,6 +1,7 @@
 (uiop:define-package :bp/core/consensus (:use :cl)
   (:use :bp/core/encoding
         :bp/core/chain
+        :bp/core/merkletree
         :bp/core/block
         :bp/core/transaction
         :bp/core/script
@@ -116,7 +117,11 @@ extend it with additional data if supplied."
 
 (defmethod validate ((cblock cblock) &key context)
   (declare (ignore context))
-  ;; TODO: validate transactions and merkle root
+  (let* ((merkle-leaves (coerce (block-transactions cblock) 'list))
+         (merkle-tree   (build-merkle-tree merkle-leaves)))
+    (unless (equalp (merkle-tree-node-hash merkle-tree)
+                    (block-merkle-root cblock))
+      (error "Block merkle root and transaction tree merkle root differ.")))
   (validate (block-header cblock))
   t)
 
