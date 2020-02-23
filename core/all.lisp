@@ -7,5 +7,5 @@
    :bp/core/block
    :bp/core/chain
    :bp/core/merkletree
-   :bp/core/constants
+   :bp/core/parameters
    :bp/core/consensus))

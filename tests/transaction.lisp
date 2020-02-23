@@ -64,3 +64,15 @@ transaction types."
       (loop
          :for txid :in txs
          :do (is (validp (get-transaction txid)))))))
+
+(test pre-bip-0016-transaction-validation
+  :description "Test that pre-BIP-0016 transaction is valid when
+BIP-0016 is manually marked as inactive."
+  (with-chain-supplier (test-chain-supplier)
+    (let ((pre-bip-0016-tx (get-transaction *pre-bip-0016-tx*)))
+      ;; Must be valid when BIP-0016 is inactive.
+      (let ((*bip-0016-active-p* nil))
+        (is (validp pre-bip-0016-tx)))
+      ;; Must fail when BIP-0016 is active.
+      (let ((*bip-0016-active-p* t))
+        (is (not (validp pre-bip-0016-tx)))))))

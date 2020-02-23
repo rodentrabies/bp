@@ -7,9 +7,11 @@
   (:export
    ;; Chain supplier API:
    #:with-chain-supplier
+   #:chain-testnet-p
    #:chain-get-block-hash
    #:chain-get-block
    #:chain-get-transaction
+   #:testnet-p
    #:get-block-hash
    #:get-block
    #:get-transaction
@@ -62,6 +64,12 @@
   (:report
    (lambda (e s)
      (format s "Unknown transaction ~a." (unknown-transaction-id e)))))
+
+(defgeneric chain-testnet-p (supplier)
+  (:documentation "Return NIL if SUPPLIER's network is :MAINNET and T
+otherwise.")
+  (:method (supplier)
+    (not (eq (chain-supplier-network supplier) :mainnet))))
 
 (defgeneric chain-get-block-hash (supplier height &key errorp)
   (:documentation "Get the hash of the block from SUPPLIER by its
@@ -223,6 +231,9 @@ hex-encoded input/output."))
 (defmacro with-chain-supplier ((type &rest args &key &allow-other-keys) &body body)
   `(let ((*chain-supplier* (make-instance ',type ,@args)))
      ,@body))
+
+(defun testnet-p ()
+  (chain-testnet-p *chain-supplier*))
 
 (defun get-block-hash (height &key errorp)
   (chain-get-block-hash *chain-supplier* height :errorp errorp))

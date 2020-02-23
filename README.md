@@ -200,7 +200,8 @@ CL-USER> (bp:validate
                     'bp:validation-context
                     :tx-index 0
                     :height 227836
-                    :block (bp:get-block "00000000000000d0dfd4c9d588d325dce4f32c1b31b7c0064cba7025a9b9adcc")))
+                    :block (bp:get-block
+                            "00000000000000d0dfd4c9d588d325dce4f32c1b31b7c0064cba7025a9b9adcc")))
 T
 ```
 

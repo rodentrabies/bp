@@ -5,7 +5,7 @@
         :bp/core/block
         :bp/core/transaction
         :bp/core/script
-        :bp/core/constants
+        :bp/core/parameters
         :bp/crypto/hash)
   (:export
    #:validate
@@ -359,14 +359,25 @@ Assumes chain supplier context."
               (error "Coinbase previous tx index must be 0xFFFFFFFF."))
             t)
           ;; Regular txin.
-          (let* ((prev-out
-                  (get-transaction-output
-                   (txin-previous-tx-id txin)
-                   (txin-previous-tx-index txin)))
+          (let* ((prev-out (get-transaction-output
+                            (txin-previous-tx-id txin)
+                            (txin-previous-tx-index txin)))
                  (script-pubkey (txout-script-pubkey prev-out))
                  (amount (txout-amount prev-out))
                  (script-sig (txin-script-sig txin))
                  (witness (tx-witness (@tx context) (@txin-index context)))
+                 (*bip-0016-active-p*
+                  ;; If block information is available, detect whether
+                  ;; BIP-0016 is active using the known switch
+                  ;; timestamps.
+                  ;; TODO: this is too hacky - need to come up with a
+                  ;;       better upgrade indicators.
+                  (if (@block context)
+                      (>= (block-timestamp (@block context))
+                          (if (testnet-p)
+                              +testnet-bip-0016-switch-time+
+                              +mainnet-bip-0016-switch-time+))
+                      *bip-0016-active-p*))
                  (sighashf
                   (lambda (script-code sighash-type sigversion)
                     (tx-sighash (@tx context)
@@ -387,7 +398,3 @@ Assumes chain supplier context."
   (declare (ignore context))
   ;; Assume all txouts are valid for now.
   t)
-
-#+test
-(defvar *non-p2sh-tx*
-  "6a26d2ecb67f27d1fa5524763b49029d7106e91e3cc05743073461a719776192")

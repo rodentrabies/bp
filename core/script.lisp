@@ -1,6 +1,7 @@
 (uiop:define-package :bp/core/script (:use :cl)
   (:use
    :bp/core/encoding
+   :bp/core/parameters
    :bp/crypto/hash
    :bp/crypto/secp256k1)
   (:export
@@ -247,7 +248,11 @@ Core."
       nil))
 
 (defvar *trace-script-execution* nil
-  "Dynamic variable to control printing the steps of script execution.")
+  "Dynamic variable to control printing the steps of script execution.
+If its value is not NIL, it will be used as a first argument to the
+FORMAT function for logging script steps (i.e. setting it to T will
+print the trace to *STANDARD-OUTPUT*, while setting it to a stream
+value will write the trace to that stream).")
 
 (defun print-script-execution-state (current-command state)
   (flet ((command-op-name (command)
@@ -255,10 +260,11 @@ Core."
          (hex-sequence (bytes)
            (map 'vector (lambda (b) (format nil "~x" b)) bytes)))
     (format
-     t "op:       ~a~@
-        payload:  ~a~@
-        commands: <~{~a~^ ~}>~@
-        stack:    ~a~%~%"
+     *trace-script-execution*
+     "op:       ~a~@
+      payload:  ~a~@
+      commands: <~{~a~^ ~}>~@
+      stack:    ~a~%~%"
      (command-op-name current-command)
      ;; Print hex-encoded payload, if current command is a push
      ;; command, or '-' character otherwise.
@@ -379,10 +385,12 @@ script structure:
           (setf (@sigversion state) (script-sigversion redeem-script))
           (cond
             ;; P2SH-P2WPKH (P2WPKH nested in P2SH).
-            ((p2wpkh-p redeem-script)
+            ((and *bip-0141-active-p*
+                  (p2wpkh-p redeem-script))
              (execute-p2wpkh redeem-script :state state))
             ;; P2SH-P2WSH (P2WSH nested in P2SH).
-            ((p2wsh-p redeem-script)
+            ((and *bip-0141-active-p*
+                  (p2wsh-p redeem-script))
              (execute-p2wsh redeem-script :state state))
             ;; Regular P2SH.
             (t
@@ -440,11 +448,15 @@ stack and performing the special rule detection (P2SH, SegWit)."
     ;; overwritten in EXECUTE-P2SH.
     (setf (@sigversion state) (script-sigversion script-pubkey))
     (cond
-      ((p2sh-p script-pubkey)
+      ((and *bip-0016-active-p*
+            (p2sh-p script-pubkey))
        (execute-p2sh script-pubkey :state state))
-      ((p2wpkh-p script-pubkey)
+      ((and *bip-0141-active-p*
+            (p2wpkh-p script-pubkey))
        (execute-p2wpkh script-pubkey :state state))
-      ((p2wsh-p script-pubkey)
+      ((and *bip-0016-active-p*
+            *bip-0141-active-p*
+            (p2wsh-p script-pubkey))
        (execute-p2wsh script-pubkey :state state))
       (t
        (execute-script script-pubkey :state state)))))
