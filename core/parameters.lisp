@@ -7,7 +7,9 @@
    #:+mainnet-bip-0016-switch-time+
    ;; Variables:
    #:*bip-0016-active-p*
-   #:*bip-0141-active-p*))
+   #:*bip-0141-active-p*
+   ;; BP-specific parameters:
+   #:*bp-version*))
 
 (in-package :bp/core/parameters)
 
@@ -43,3 +45,11 @@ https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki.")
 (defparameter *bip-0141-active-p* t
   "Segregated Witness (Consensus layer)
 https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki.")
+
+
+
+;;;-----------------------------------------------------------------------------
+;;; BP package parameters
+
+(defvar *bp-version* "0.0.1"
+  "Version of the BP package.")

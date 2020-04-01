@@ -5,12 +5,20 @@
   :license "MIT"
   :class :package-inferred-system
   :pathname #P"./"
-  :depends-on ("cffi" "aserve" "jsown" "ironclad" "bp/core/all" "bp/crypto/all")
-  :in-order-to ((test-op (test-op "bp/tests"))))
+  :depends-on ("bp/core/all"
+               "bp/crypto/all"
+               "bp/network/all")
+  :in-order-to ((test-op (test-op "bp/tests")))
+  ;; External dependencies.
+  :depends-on ("cffi" "aserve" "jsown" "ironclad" "usocket"))
+
+
 
 (defsystem "bp/tests"
   :description "Test system for BP."
   :class :package-inferred-system
   :pathname #P "./tests"
-  :depends-on ("bp" "fiveam" "bp/tests/all")
-  :perform (test-op (o c) (uiop:symbol-call :fiveam :run-all-tests)))
+  :depends-on ("bp" "bp/tests/all")
+  :perform (test-op (o c) (uiop:symbol-call :fiveam :run-all-tests))
+  ;; External dependencies.
+  :depends-on ("fiveam"))
