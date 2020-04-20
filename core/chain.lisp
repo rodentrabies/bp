@@ -18,12 +18,15 @@
    ;; Chain supplier conditions:
    #:unknown-entity-error
    #:unknown-block-hash-error
+   #:unknown-block-height
    #:unknown-block-error
+   #:unknown-block-hash
    #:unknown-transaction-error
-   ;; Available chain suppliers/mixins:
+   #:unknown-transaction-id
+   ;; Available chain suppliers/helpers:
    #:chain-supplier
-   #:chain-supplier-encoded-mixin
-   #:node-connection))
+   #:node-connection
+   #:with-chain-supplier-normalization))
 
 (in-package :bp/core/chain)
 
@@ -71,11 +74,13 @@ otherwise.")
   (:method (supplier)
     (not (eq (chain-supplier-network supplier) :mainnet))))
 
-(defgeneric chain-get-block-hash (supplier height &key errorp)
+(defgeneric chain-get-block-hash (supplier height &key encoded errorp)
   (:documentation "Get the hash of the block from SUPPLIER by its
-HEIGHT in the chain. HEIGHT must be an integer. If there is no known
-block at the given HEIGHT, return NIL or signal an
-UNKNOWN-BLOCK-HASH-ERROR error, depending on the ERRORP value."))
+HEIGHT in the chain. HEIGHT must be an integer. If ENCODED is non-NIL,
+returns a hex-encoded string, otherwise returns a raw id represented
+as byte array. If there is no known block at the given HEIGHT, return
+NIL or signal an UNKNOWN-BLOCK-HASH-ERROR error, depending on the
+ERRORP value."))
 
 (defgeneric chain-get-block (supplier hash &key encoded errorp)
   (:documentation "Get raw block data from SUPPLIER by its HASH. HASH
@@ -94,46 +99,75 @@ value."))
 
 
 ;;;-----------------------------------------------------------------------------
-;;; Hex-encoded chain supplier mixin
+;;; Helper macros
 
-(defclass chain-supplier-encoded-mixin ()
-  ()
-  (:documentation "A mixin that provides a common normalization,
-encoding and decoding logic for chain suppliers that are handling
-hex-encoded input/output."))
+(defmacro with-chain-supplier-normalization ((id-var encoded-var errorp-var
+                                                     &key entity-type id-type
+                                                     body-type error-type)
+                                             &body body)
+  "Helper macro for generating the normalization if the entity
+identifier (block height, block hash and transaction id) and
+post-processing (encoding, decoding and error signalling) for the
+chain supplier API implementations.  
 
-(defmethod chain-get-block-hash :around ((supplier chain-supplier-encoded-mixin)
-                                         height &key errorp)
-  (or (call-next-method supplier height)
-      (and errorp (error 'unknown-block-hash-error :height height))))
+ID-VAR is an entity identifier variable, which will be normalized to a
+hex-string, byte array or left unchanged if the value of ID-TYPE is
+:ENCODED, :DECODED or :AS-IS respectively.
 
-(defmethod chain-get-block :around ((supplier chain-supplier-encoded-mixin)
-                                    hash &key encoded errorp)
-  (let* ((hash (if (stringp hash) hash (to-hex (reverse hash))))
-         (hex-block (call-next-method supplier hash :encoded t)))
-    (cond ((and hex-block encoded)
-           hex-block)
-          (hex-block
-           (decode 'cblock hex-block))
-          (errorp
-           (error 'unknown-block-error :hash hash)))))
+ENCODED-VAR corresponds to ENCODED chain supplier parameter - it will
+be used in combination with BODY-TYPE argument to determine if the
+result of the BODY should be encoded, decoded (as an ENTITY-TYPE
+entity in the latter case) or left as-is.
 
-(defmethod chain-get-transaction :around ((supplier chain-supplier-encoded-mixin)
-                                          id &key encoded errorp)
-  (let* ((id (if (stringp id) id (to-hex (reverse id))))
-         (hex-tx (call-next-method supplier id :encoded t)))
-    (cond ((and hex-tx encoded)
-           hex-tx)
-          (hex-tx
-           (decode 'tx hex-tx))
-          (errorp
-           (error 'unknown-transaction-error :id id)))))
+ERROPR-VAR corresponds to the ERRORP chain supplier parameter - it
+will be used to either return NIL or signal a corresponding error if
+the body returns NIL. If ERROR-TYPE is non-NIL, it will be used
+instead of the default error type."
+  (let* ((result (gensym "chain-supplier-result"))
+         (id-form
+          (ecase id-type
+            (:encoded `(if (stringp ,id-var)
+                           ,id-var
+                           (to-hex (reverse ,id-var))))
+            (:decoded `(if (stringp ,id-var)
+                           (reverse (from-hex ,id-var))
+                           ,id-var))
+            (:as-is   `,id-var)))
+         (encode-form
+          (ecase entity-type
+            (:block-hash           `(to-hex (reverse ,result)))
+            ((:block :transaction) `(encode ,result))))
+         (decode-form
+          (ecase entity-type
+            (:block-hash  `(reverse (from-hex ,result)))
+            (:block       `(decode 'cblock ,result))
+            (:transaction `(decode 'tx ,result))))
+         (error-form
+          (ecase entity-type
+            (:block-hash  `(error ',(or error-type 'unknown-block-hash-error)
+                                  :height ,id-var))
+            (:block       `(error ',(or error-type 'unknown-block-error)
+                                  :hash ,id-var))
+            (:transaction `(error ',(or error-type 'unknown-transaction-error)
+                                  :id ,id-var)))))
+    `(let* ((,id-var ,id-form)
+            (,result (progn ,@body)))
+       (or ,(ecase body-type
+              (:encoded
+               `(cond ((and ,result ,encoded-var) ,result)
+                      (,result                    ,decode-form)))
+              (:decoded
+               `(cond ((and ,result ,encoded-var) ,encode-form)
+                      (,result                    ,result)))
+              (:as-is
+               result))
+           (and ,errorp-var ,error-form)))))
 
 
 ;;;-----------------------------------------------------------------------------
 ;;; Node-connection chain supplier implementation
 
-(defclass node-connection (chain-supplier chain-supplier-encoded-mixin)
+(defclass node-connection (chain-supplier)
   ((url
     :accessor node-connection-url
     :initarg :url)
@@ -204,22 +238,31 @@ hex-encoded input/output."))
      (rpc-error (e)
        (values nil e))))
 
-(defmethod chain-get-block-hash ((supplier node-connection) height &key errorp)
-  (declare (ignore errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
-  (ignore-rpc-errors
-    (do-simple-rpc-call supplier "getblockhash" height)))
+(defmethod chain-get-block-hash ((supplier node-connection) height &key (encoded t) errorp)
+  (with-chain-supplier-normalization (height encoded errorp
+                                      :entity-type :block-hash
+                                      :id-type     :as-is
+                                      :body-type   :encoded)
+    (ignore-rpc-errors
+      (do-simple-rpc-call supplier "getblockhash" height))))
 
 (defmethod chain-get-block ((supplier node-connection) hash &key encoded errorp)
-  (declare (ignore encoded errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
-  (ignore-rpc-errors
-    ;; Second argument (0) tells Bitcoin RPC handler to return raw
-    ;; hex-encoded block.
-    (do-simple-rpc-call supplier "getblock" hash 0)))
+  (with-chain-supplier-normalization (hash encoded errorp
+                                      :entity-type :block
+                                      :id-type     :encoded
+                                      :body-type   :encoded)
+    (ignore-rpc-errors
+      ;; Second argument (0) tells Bitcoin RPC handler to return raw
+      ;; hex-encoded block.
+      (do-simple-rpc-call supplier "getblock" hash 0))))
 
 (defmethod chain-get-transaction ((supplier node-connection) id &key encoded errorp)
-  (declare (ignore encoded errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
-  (ignore-rpc-errors
-    (do-simple-rpc-call supplier "getrawtransaction" id)))
+  (with-chain-supplier-normalization (id encoded errorp
+                                      :entity-type :transaction
+                                      :id-type     :encoded
+                                      :body-type   :encoded)
+    (ignore-rpc-errors
+      (do-simple-rpc-call supplier "getrawtransaction" id))))
 
 
 ;;;-----------------------------------------------------------------------------

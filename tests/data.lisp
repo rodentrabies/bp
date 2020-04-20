@@ -27,23 +27,32 @@
   "List of all registered test transactions.")
 
 
-(defclass test-chain-supplier (chain-supplier chain-supplier-encoded-mixin)
+(defclass test-chain-supplier (chain-supplier)
   ()
   (:documentation "TEST-CHAIN-SUPPLIER retrieves chain data from a set
 of hash tables defined above."))
 
 ;;; Implementation of chain supplier API for test supplier.
-(defmethod chain-get-block-hash ((s test-chain-supplier) height &key errorp)
-  (declare (ignore errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
-  (gethash height *test-chain-block-hashes*))
+(defmethod chain-get-block-hash ((s test-chain-supplier) height &key (encoded t) errorp)
+  (with-chain-supplier-normalization (height encoded errorp
+                                      :entity-type :block-hash
+                                      :id-type     :as-is
+                                      :body-type   :encoded)
+    (gethash height *test-chain-block-hashes*)))
 
 (defmethod chain-get-block ((s test-chain-supplier) hash &key encoded errorp)
-  (declare (ignore encoded errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
-  (gethash hash *test-chain-blocks*))
+  (with-chain-supplier-normalization (hash encoded errorp
+                                      :entity-type :block
+                                      :id-type     :encoded
+                                      :body-type   :encoded)
+    (gethash hash *test-chain-blocks*)))
 
 (defmethod chain-get-transaction ((s test-chain-supplier) id &key encoded errorp)
-  (declare (ignore encoded errorp)) ;; handled by CHAIN-SUPPLIER-ENCODED-MIXIN
-  (gethash id *test-chain-transactions*))
+  (with-chain-supplier-normalization (id encoded errorp
+                                      :entity-type :transaction
+                                      :id-type     :encoded
+                                      :body-type   :encoded)
+    (gethash id *test-chain-transactions*)))
 
 
 (defmacro add-test-block (name &body (height hash hex))
