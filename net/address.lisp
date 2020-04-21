@@ -1,4 +1,4 @@
-(uiop:define-package :bp/network/address (:use :cl)
+(uiop:define-package :bp/net/address (:use :cl)
   (:import-from :usocket)
   (:export
    ;; Address utilities:
@@ -7,7 +7,7 @@
    #:address-from-bytes
    #:random-peer-address))
 
-(in-package :bp/network/address)
+(in-package :bp/net/address)
 
 ;;; Address management and peer-discovery utilities.
 

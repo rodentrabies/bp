@@ -1,6 +1,6 @@
-(uiop:define-package :bp/network/message (:use :cl)
+(uiop:define-package :bp/net/message (:use :cl)
   (:use :bp/core/all
-        :bp/network/address)
+        :bp/net/address)
   (:import-from :ironclad)
   (:import-from :usocket)
   ;; Messages and their field accessors are automatically exported by
@@ -32,7 +32,7 @@
    #:message-type-from-command))
 
 
-(in-package :bp/network/message)
+(in-package :bp/net/message)
 
 
 ;;;-----------------------------------------------------------------------------

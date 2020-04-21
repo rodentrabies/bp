@@ -1,9 +1,9 @@
-(uiop:define-package :bp/network/node (:use :cl)
+(uiop:define-package :bp/net/node (:use :cl)
   (:use :bp/core/all
         :bp/crypto/all
-        :bp/network/parameters
-        :bp/network/address
-        :bp/network/message)
+        :bp/net/parameters
+        :bp/net/address
+        :bp/net/message)
   (:import-from :ironclad)
   (:import-from :usocket)
   (:export
@@ -21,7 +21,7 @@
    #:node-host
    #:node-port))
 
-(in-package :bp/network/node)
+(in-package :bp/net/node)
 
 
 ;;;-----------------------------------------------------------------------------
