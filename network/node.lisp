@@ -138,7 +138,7 @@
   ((host
     :accessor node-host
     :initarg :host
-    :initform "127.0.0.1")
+    :initform nil)
    (port
     :accessor node-port
     :initarg :port
@@ -167,20 +167,29 @@ single peer via peer-2-peer gossip protocol."))
                                    (:testnet +testnet-network-port+)
                                    (:regtest +regtest-network-port+))))
   ;; Open a connection to the peer and construct a new PEER structure.
-  (let* ((connection (usocket:socket-connect
-                      host port :element-type '(unsigned-byte 8)
-                      :local-host (node-host node)
-                      :local-port (node-port node)))
+  (let* ((original-node-host (node-host node))
+         (original-node-port (node-port node))
+         (connection (usocket:socket-connect
+                      host port
+                      :element-type '(unsigned-byte 8)
+                      :local-host original-node-host
+                      :local-port original-node-port))
          (peer (make-peer :host host :port port :connection connection)))
-    ;; Perform a shake hands, but make sure the connection is closed
-    ;; if handshake fails.
+    ;; Update node's HOST and PORT slots before handshake to be able
+    ;; to construct corret NETWORK-ADDRESS structs.
+    (setf (node-host node) (usocket:get-local-address connection))
+    (setf (node-port node) (usocket:get-local-port connection))
+    ;; Perform a handshake, but make sure the connection is closed if
+    ;; handshake fails.
     (handler-case
         (perform-handshake node peer)
       (error (e)
         (usocket:socket-close (peer-connection peer))
         (error e)))
-    ;; Only add peer to the node if successfully connected and shook
-    ;; hands.
+    ;; Only update node's HOST and PEER slots if successfully
+    ;; connected and shook hands.
+    (setf (node-host node) original-node-host)
+    (setf (node-port node) original-node-port)
     (setf (node-peer node) peer)))
 
 (defmethod disconnect-peer ((node simple-node) (peer (eql :all)))
@@ -212,3 +221,52 @@ single peer via peer-2-peer gossip protocol."))
 
 (defmethod handle-message ((node simple-node) (peer peer) (message ping-message))
   (send-message node peer (make-pong-message :nonce (ping-message-nonce message))))
+
+;;; Chain supplier interface implementation
+
+(defmethod chain-get-block-hash ((node simple-node) height &key encoded errorp)
+  (declare (ignore encoded errorp))
+  (error "SIMPLE-NODE chain supplier does not support retrieving block hashes by height."))
+
+(defmethod chain-get-block ((node simple-node) hash &key encoded errorp)
+  (with-chain-supplier-normalization (hash encoded errorp
+                                      :entity-type :block
+                                      :id-type     :decoded
+                                      :body-type   :decoded)
+    (let* ((block-iv (make-inventory-vector :type +iv-msg-block+ :hash hash))
+           (inventory
+            (make-array 1 :element-type 'inventory-vector :initial-contents (list block-iv)))
+           (request (make-getdata-message :inventory inventory))
+           (response
+            (progn
+              (send-message node (node-peer node) request)
+              (seek-message node (node-peer node) '(or block-message notfound-message)))))
+      (when (typep response 'block-message)
+        (block-message-block response)))))
+
+(define-condition transaction-not-available-error (unknown-transaction-error)
+  ()
+  (:report
+   (lambda (e s)
+     (format s "Transaction ~a is not in mempool or relay set." (unknown-transaction-id e))))
+  (:documentation "NOTFOUND response to +IV-MSG-TX+ GETDATA message
+means that the transaction that was requested is either unknown or is
+not present in mempool or relay-set, so this error is more precise
+than UNKNOWN-TRANSACTION-ERROR."))
+
+(defmethod chain-get-transaction ((node simple-node) id &key encoded errorp)
+  (with-chain-supplier-normalization (id encoded errorp
+                                      :entity-type :transaction
+                                      :id-type     :decoded
+                                      :body-type   :decoded
+                                      :error-type  transaction-not-available-error)
+    (let* ((tx-iv (make-inventory-vector :type +iv-msg-tx+ :hash id))
+           (inventory
+            (make-array 1 :element-type 'inventory-vector :initial-contents (list tx-iv)))
+           (request (make-getdata-message :inventory inventory))
+           (response
+            (progn
+              (send-message node (node-peer node) request)
+              (seek-message node (node-peer node) '(or tx-message notfound-message)))))
+      (when (typep response 'tx-message)
+        (tx-message-tx response)))))
