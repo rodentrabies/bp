@@ -1,13 +1,13 @@
 (defsystem "bp"
   :description "Bitcoin Protocol components in Common Lisp"
-  :version "0.0.1"
+  :version "0.0.2"
   :author "whythat <whythat@protonmail.com>"
   :license "MIT"
   :class :package-inferred-system
   :pathname #P"./"
   :depends-on ("bp/core/all"
                "bp/crypto/all"
-               "bp/network/all")
+               "bp/net/all")
   :in-order-to ((test-op (test-op "bp/tests")))
   ;; External dependencies.
   :depends-on ("cffi" "aserve" "jsown" "ironclad" "usocket"))
