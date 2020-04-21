@@ -2,6 +2,7 @@
   (:use :bp/core/all
         :bp/crypto/all
         :bp/network/parameters
+        :bp/network/address
         :bp/network/message)
   (:import-from :ironclad)
   (:import-from :usocket)
@@ -145,29 +146,41 @@
     :initform +bp-network-port+)
    (peer
     :accessor node-peer
-    :initarg :peer
     :initform nil))
   (:documentation "Simple Bitcoin network node communicating with a
 single peer via peer-2-peer gossip protocol."))
 
-(defmethod initialize-instance :after ((node simple-node) &key)
-  (setf (node-port node)
-        (ecase (node-network node)
-          (:mainnet +bp-network-port+)
-          (:testnet +bp-testnet-network-port+)
-          (:regtest +bp-regtest-network-port+))))
+(defmethod initialize-instance :after ((node simple-node) &key peer)
+  (let ((network (node-network node)))
+    ;; Initialize local port.
+    (setf (node-port node)
+          (ecase network
+            (:mainnet +bp-network-port+)
+            (:testnet +bp-testnet-network-port+)
+            (:regtest +bp-regtest-network-port+)))
+    ;; Connect to a discovered peer or to a provided address.
+    (multiple-value-bind (peer-host peer-port)
+        (cond ((eq peer :discover)
+               (unless (eq network :mainnet)
+                 (error "Peer discovery currently only supported for mainnet."))
+               (values (random-peer-address) nil))
+              ((stringp peer)
+               (split-host/port-string peer))
+              (t
+               (values nil nil)))
+      (when peer-host
+        (connect-peer node :host peer-host :port peer-port)))))
 
 ;;; Network interface implementation
 
-(defmethod connect-peer ((node simple-node)
-                         &key
-                           (host "127.0.0.1")
-                           (port (ecase (node-network node)
-                                   (:mainnet +network-port+)
-                                   (:testnet +testnet-network-port+)
-                                   (:regtest +regtest-network-port+))))
+(defmethod connect-peer ((node simple-node) &key host port)
   ;; Open a connection to the peer and construct a new PEER structure.
-  (let* ((original-node-host (node-host node))
+  (let* ((host (or host "127.0.0.1"))
+         (port (or port (ecase (node-network node)
+                          (:mainnet +network-port+)
+                          (:testnet +testnet-network-port+)
+                          (:regtest +regtest-network-port+))))
+         (original-node-host (node-host node))
          (original-node-port (node-port node))
          (connection (usocket:socket-connect
                       host port
