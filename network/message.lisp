@@ -1,5 +1,6 @@
 (uiop:define-package :bp/network/message (:use :cl)
-  (:use :bp/core/all)
+  (:use :bp/core/all
+        :bp/network/address)
   (:import-from :ironclad)
   (:import-from :usocket)
   ;; Messages and their field accessors are automatically exported by
@@ -84,21 +85,6 @@
   services
   address
   port)
-
-;; NOTE: currently only supports IPv4 addresses.
-(defun address-to-bytes (address)
-  (let ((bytes (make-array 16 :element-type '(unsigned-byte 8) :initial-element 0)))
-    ;; IPv4-mapped IPv6 address.
-    (setf (aref bytes 10) #xff)
-    (setf (aref bytes 11) #xff)
-    (usocket:ip-to-octet-buffer address bytes :start 12)
-    bytes))
-
-;; NOTE: currently only supports IPv4 addresses.
-(defun address-from-bytes (bytes)
-  ;; (assert (and (= (aref bytes 10) #xff) (= (aref bytes 11) #xff)) ()
-  ;;         "Currently IPv4 addresses are supported.")
-  (usocket:hbo-to-dotted-quad (usocket:ip-from-octet-buffer bytes :start 12)))
 
 (defmethod serialize ((struct network-address) stream)
   (let* ((services (network-address-services struct))
