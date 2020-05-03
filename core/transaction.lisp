@@ -129,12 +129,12 @@ otherwise."
 without witness structures."
   (let ((legacy-tx (copy-tx tx)))
     (setf (tx-witnesses legacy-tx) nil)
-    (to-hex (reverse (tx-hash legacy-tx)))))
+    (hex-encode (reverse (tx-hash legacy-tx)))))
 
 (defun tx-wid (tx)
   "Return hex-encoded wtxid - little-endian hash of the transaction
 serialization including witness structures."
-  (to-hex (reverse (tx-hash tx))))
+  (hex-encode (reverse (tx-hash tx))))
 
 (defun tx-output (tx index)
   "Return INDEXth output of the given transaction."
@@ -185,7 +185,7 @@ transaction, otherwise return NIL."
   (print-unreadable-object (txin stream :type t)
     (format
      stream "~a:~a"
-     (to-hex (reverse (txin-previous-tx-id txin)))
+     (hex-encode (reverse (txin-previous-tx-id txin)))
      (txin-previous-tx-index txin))))
 
 (defstruct txout

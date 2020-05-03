@@ -39,7 +39,7 @@
 (defgeneric block-hash (block))
 
 (defun block-id (block)
-  (to-hex (reverse (block-hash block))))
+  (hex-encode (reverse (block-hash block))))
 
 
 ;;;-----------------------------------------------------------------------------
@@ -87,7 +87,7 @@
     (format
      stream "~&  id:   ~a~&  prev: ~a"
      (block-id block-header)
-     (to-hex (reverse (block-previous-block-hash block-header))))))
+     (hex-encode (reverse (block-previous-block-hash block-header))))))
 
 (defmethod block-version ((block-header block-header))
   (block-header-version block-header))
@@ -150,7 +150,7 @@
      stream "(~a txs)~&  id:   ~a~&  prev: ~a"
      (length (block-transactions cblock))
      (block-id (block-header cblock))
-     (to-hex (reverse (block-previous-block-hash cblock))))))
+     (hex-encode (reverse (block-previous-block-hash cblock))))))
 
 (defmethod block-version ((cblock cblock))
   (block-version (block-header cblock)))

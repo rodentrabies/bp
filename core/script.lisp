@@ -175,9 +175,9 @@ otherwise."
 (defmethod print-object ((script script) stream)
   (flet ((print-command (c)
            (cond ((and (consp c) (eq (car c) :unexpected_end))
-                  (format nil "UNEXPECTED_END ~a" (to-hex (cdr c))))
+                  (format nil "UNEXPECTED_END ~a" (hex-encode (cdr c))))
                  ((consp c)
-                  (format nil "~{~a~^/~} ~a" (opcode (car c)) (to-hex (cdr c))))
+                  (format nil "~{~a~^/~} ~a" (opcode (car c)) (hex-encode (cdr c))))
                  (t
                   (format nil "~{~a~^/~}" (opcode c))))))
    (print-unreadable-object (script stream :type t)
@@ -192,7 +192,7 @@ the best effort to detect/convert the provided values."
              ((or array string)
               (let* ((data
                       (if (stringp symbolic-command)
-                          (from-hex symbolic-command)
+                          (hex-decode symbolic-command)
                           symbolic-command))
                      (data-length (length data)))
                 (cons (cond ((> data-length 520)

@@ -128,18 +128,18 @@ instead of the default error type."
           (ecase id-type
             (:encoded `(if (stringp ,id-var)
                            ,id-var
-                           (to-hex (reverse ,id-var))))
+                           (hex-encode (reverse ,id-var))))
             (:decoded `(if (stringp ,id-var)
-                           (reverse (from-hex ,id-var))
+                           (reverse (hex-decode ,id-var))
                            ,id-var))
             (:as-is   `,id-var)))
          (encode-form
           (ecase entity-type
-            (:block-hash           `(to-hex (reverse ,result)))
+            (:block-hash           `(hex-encode (reverse ,result)))
             ((:block :transaction) `(encode ,result))))
          (decode-form
           (ecase entity-type
-            (:block-hash  `(reverse (from-hex ,result)))
+            (:block-hash  `(reverse (hex-decode ,result)))
             (:block       `(decode 'cblock ,result))
             (:transaction `(decode 'tx ,result))))
          (error-form

@@ -5,9 +5,10 @@
    #:parse
    #:encode
    #:decode
+   ;; Encoding:
+   #:hex-encode
+   #:hex-decode
    ;; Utilities:
-   #:to-hex
-   #:from-hex
    #:read-bytes
    #:write-bytes
    #:read-int
@@ -16,6 +17,10 @@
    #:write-varint))
 
 (in-package :bp/core/encoding)
+
+
+;;;-----------------------------------------------------------------------------
+;;; Entity encoding/decoding API
 
 (defgeneric serialize (entity stream)
   (:documentation "Serialize ENTITY into the stream."))
@@ -26,22 +31,19 @@
 
 (defun encode (entity)
   "Encode Bitcoin Protocol ENTITY into a hex string."
-  (ironclad:byte-array-to-hex-string
+  (to-hex
    (ironclad:with-octet-output-stream (stream)
      (serialize entity stream))))
 
 (defun decode (entity-class string)
-  "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS from hex STRING."
-  (ironclad:with-octet-input-stream (stream (ironclad:hex-string-to-byte-array string))
+  "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS
+from hex STRING."
+  (ironclad:with-octet-input-stream (stream (from-hex string))
     (parse entity-class stream)))
 
-(defun to-hex (bytes)
-  "Shortcut to avoid using long symbol IRONCLAD:BYTE-ARRAY-TO-HEX-STRING."
-  (ironclad:byte-array-to-hex-string bytes))
 
-(defun from-hex (string)
-  "Shortcut to avoid using long symbol IRONCLAD:HEX-STRING-TO-BYTE-ARRAY."
-  (ironclad:hex-string-to-byte-array string))
+;;;-----------------------------------------------------------------------------
+;;; Parsing/serialization utils
 
 (defun read-bytes (stream size)
   (let ((bytes (make-array size :element-type '(unsigned-byte 8))))
@@ -91,3 +93,17 @@
          (write-int i stream :size 8 :byte-order :little))
         (t
          (error "Integer ~a is too large." i))))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Encoding formats
+
+;;; HEX
+
+(defun to-hex (bytes)
+  "Shortcut to avoid using long symbol IRONCLAD:BYTE-ARRAY-TO-HEX-STRING."
+  (ironclad:byte-array-to-hex-string bytes))
+
+(defun from-hex (string)
+  "Shortcut to avoid using long symbol IRONCLAD:HEX-STRING-TO-BYTE-ARRAY."
+  (ironclad:hex-string-to-byte-array string))
