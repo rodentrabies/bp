@@ -17,6 +17,10 @@
 
 (in-package :bp/core/script)
 
+
+;;;-----------------------------------------------------------------------------
+;;; Script parsing and serialization
+
 (defstruct script
   commands)
 
@@ -46,6 +50,53 @@ otherwise."
               (gethash name *opcodes-by-name*) (cons code        function))
         ;; Otherwise, this is an opcode alias definition.
         (push name (car (gethash code *opcodes-by-code*))))))
+
+(defun decode-integer (bytes)
+  (if (not (zerop (length bytes)))
+      (let ((rbytes (reverse bytes)))
+        (multiple-value-bind (negative-p integer)
+            (if (zerop (logand (aref rbytes 0) #x80))
+                (values nil (aref rbytes 0))
+                (values t (logand (aref rbytes 0) #x7f)))
+          (loop
+             :for i :from 1 :below (length rbytes)
+             :do (setf integer (+ (ash integer 8) (aref rbytes i)))
+             :finally (setf integer (if negative-p (- integer) integer)))
+          integer))
+      0))
+
+(defun encode-integer (integer)
+  (if (not (zerop integer))
+      (let* ((negative-p (< integer 0))
+             (ainteger (abs integer))
+             (num-bytes (ceiling (integer-length ainteger) 8))
+             (bytes
+              (make-array (1+ num-bytes)
+                          :element-type '(unsigned-byte 8)
+                          :fill-pointer 0)))
+        (loop
+           :for i :below num-bytes
+           :for byte :from 0 :by 8
+           :do (vector-push (ldb (byte 8 byte) ainteger) bytes)
+           :finally (if (zerop (logand (aref bytes (1- i)) #x80))
+                        (when negative-p
+                          (setf (aref bytes (1- i))
+                                (logior (aref bytes (1- i)) #x80)))
+                        (if negative-p
+                            (vector-push #x80 bytes)
+                            (vector-push #x00 bytes))))
+        bytes)
+      #()))
+
+(defun command-op (command)
+  (if (consp command)
+      (car command)
+      command))
+
+(defun command-payload (command)
+  (if (consp command)
+      (cdr command)
+      nil))
 
 (defmethod serialize ((script script) stream)
   (let* ((commands (script-commands script))
@@ -166,6 +217,90 @@ the best effort to detect/convert the provided values."
               (opcode symbolic-command)))))
     (make-script :commands (map 'vector #'command symbolic-commands))))
 
+
+;;;-----------------------------------------------------------------------------
+;;; Types of script-pubkey scripts
+
+(define-condition script-error (error)
+  ((script
+    :accessor script-error-script
+    :initarg :script)))
+
+(define-condition script-non-standard-error (script-error)
+  ())
+
+(defmethod print-object ((condition script-non-standard-error) stream)
+  (format stream "Non-standard script: ~a." (script-error-script condition)))
+
+(defun p2pkh-p (script-pubkey)
+  "Check if current SCRIPT-PUBKEY indicates a standard p2pkh pattern:
+    OP_DUP
+    OP_HASH160
+    <hash160>
+    OP_EQUAL
+    OP_CHECKSIG"
+  (let ((commands (script-commands script-pubkey)))
+    (and (= (length commands) 5)
+         (= (command-op (aref commands 0)) (opcode :op_dup))
+         (= (command-op (aref commands 1)) (opcode :op_hash160))
+         (command-payload (aref commands 2)) ;; NIL if not a push op
+         (= (command-op (aref commands 3)) (opcode :op_equal))
+         (= (command-op (aref commands 4)) (opcode :op_checksig)))))
+
+(defun p2sh-p (script-pubkey)
+  "Check if current SCRIPT-PUBKEY indicates the BIP 0016 (p2sh)
+pattern:
+    <redeem-script>
+    OP_HASH160
+    <hash160>
+    OP_EQUAL"
+  ;; TODO: this must also check block timestamp > 1333238400
+  (let ((commands (script-commands script-pubkey)))
+    (and (= (length commands) 3)
+         (= (command-op (aref commands 0)) (opcode :op_hash160))
+         (= (command-op (aref commands 1)) (opcode :op_push20))
+         (= (command-op (aref commands 2)) (opcode :op_equal)))))
+
+(defun segwit-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates the BIP 0141 (Segregated
+Witness) structure:
+    <version-byte>    (1 byte, OP_{0..16})
+    <witness-program> (2-40 bytes)"
+  (let ((commands (script-commands script-pubkey)))
+    (when (= (length commands) 2)
+      (let ((version (command-op (aref commands 0)))
+            (program (command-payload (aref commands 1))))
+        (and
+         ;; Version byte must be in {OP_0, OP_1, ..., OP_16}.
+         (or (= version (opcode :op_0))
+             (<= (opcode :op_1) version (opcode :op_16)))
+         ;; Witness program must be between 2 and 40 bytes.
+         (<= 2 (length program) 40))))))
+
+(defun p2wpkh-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Public Key Hash
+script structure:
+    <version-byte>
+    <20-byte witness-program>"
+  (and
+   (segwit-p script-pubkey)
+   (=  0 (aref (script-commands script-pubkey) 0))
+   (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
+
+(defun p2wsh-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Script Hash
+script structure:
+    <version-byte>
+    <32-byte witness-program>"
+  (and
+   (segwit-p script-pubkey)
+   (=  0 (aref (script-commands script-pubkey) 0))
+   (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Script execution
+
 (defstruct (script-state (:conc-name @))
   commands
   discard
@@ -199,53 +334,6 @@ Core."
          (scriptcode (make-script :commands commands))
          (sigversion (@sigversion state)))
     (funcall (@sighashf state) scriptcode hashtype sigversion)))
-
-(defun decode-integer (bytes)
-  (if (not (zerop (length bytes)))
-      (let ((rbytes (reverse bytes)))
-        (multiple-value-bind (negative-p integer)
-            (if (zerop (logand (aref rbytes 0) #x80))
-                (values nil (aref rbytes 0))
-                (values t (logand (aref rbytes 0) #x7f)))
-          (loop
-             :for i :from 1 :below (length rbytes)
-             :do (setf integer (+ (ash integer 8) (aref rbytes i)))
-             :finally (setf integer (if negative-p (- integer) integer)))
-          integer))
-      0))
-
-(defun encode-integer (integer)
-  (if (not (zerop integer))
-      (let* ((negative-p (< integer 0))
-             (ainteger (abs integer))
-             (num-bytes (ceiling (integer-length ainteger) 8))
-             (bytes
-              (make-array (1+ num-bytes)
-                          :element-type '(unsigned-byte 8)
-                          :fill-pointer 0)))
-        (loop
-           :for i :below num-bytes
-           :for byte :from 0 :by 8
-           :do (vector-push (ldb (byte 8 byte) ainteger) bytes)
-           :finally (if (zerop (logand (aref bytes (1- i)) #x80))
-                        (when negative-p
-                          (setf (aref bytes (1- i))
-                                (logior (aref bytes (1- i)) #x80)))
-                        (if negative-p
-                            (vector-push #x80 bytes)
-                            (vector-push #x00 bytes))))
-        bytes)
-      #()))
-
-(defun command-op (command)
-  (if (consp command)
-      (car command)
-      command))
-
-(defun command-payload (command)
-  (if (consp command)
-      (cdr command)
-      nil))
 
 (defvar *trace-script-execution* nil
   "Dynamic variable to control printing the steps of script execution.
@@ -314,56 +402,6 @@ value will write the trace to that stream).")
                  (not (zerop (length (@stack state))))
                  (not (equalp (first (@stack state)) #())))
             (mapcar #'decode-integer (@stack state)))))
-
-(defun p2sh-p (script-pubkey)
-  "Check if current SCRIPT-PUBKEY indicates the BIP 0016 (p2sh)
-pattern:
-    <redeem-script>
-    OP_HASH160
-    <hash160>
-    OP_EQUAL"
-  ;; TODO: this must also check block timestamp > 1333238400
-  (let ((commands (script-commands script-pubkey)))
-    (and (= (length commands) 3)
-         (= (command-op (aref commands 0)) (opcode :op_hash160))
-         (= (command-op (aref commands 1)) (opcode :op_push20))
-         (= (command-op (aref commands 2)) (opcode :op_equal)))))
-
-(defun segwit-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates the BIP 0141 (Segregated
-Witness) structure:
-    <version-byte>    (1 byte, OP_{0..16})
-    <witness-program> (2-40 bytes)"
-  (let ((commands (script-commands script-pubkey)))
-    (when (= (length commands) 2)
-      (let ((version (command-op (aref commands 0)))
-            (program (command-payload (aref commands 1))))
-        (and
-         ;; Version byte must be in {OP_0, OP_1, ..., OP_16}.
-         (or (= version (opcode :op_0))
-             (<= (opcode :op_1) version (opcode :op_16)))
-         ;; Witness program must be between 2 and 40 bytes.
-         (<= 2 (length program) 40))))))
-
-(defun p2wpkh-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Public Key Hash
-script structure:
-    <version-byte>
-    <20-byte witness-program>"
-  (and
-   (segwit-p script-pubkey)
-   (=  0 (aref (script-commands script-pubkey) 0))
-   (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
-
-(defun p2wsh-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Script Hash
-script structure:
-    <version-byte>
-    <20-byte witness-program>"
-  (and
-   (segwit-p script-pubkey)
-   (=  0 (aref (script-commands script-pubkey) 0))
-   (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun execute-p2sh (script-pubkey &key state)
   (let ((redeem-data (first (@stack state))))
@@ -461,8 +499,9 @@ stack and performing the special rule detection (P2SH, SegWit)."
       (t
        (execute-script script-pubkey :state state)))))
 
+
 ;;;-----------------------------------------------------------------------------
-;;; Operation definitions
+;;; Script operation definitions
 ;;; Source: https://en.bitcoin.it/wiki/Script
 
 ;;; Macros

@@ -1,6 +1,6 @@
 (uiop:define-package :bp/core/parameters (:use :cl)
   (:export
-   ;; Contants:
+   ;; Constants:
    #:+initial-block-reward+
    #:+halving-period+
    #:+testnet-bip-0016-switch-time+
