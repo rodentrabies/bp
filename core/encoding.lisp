@@ -26,7 +26,19 @@
    #:base58check-decode
    #:base58check-checksum-error
    #:base58check-bad-checksum-error
-   #:base58check-no-checksum-error))
+   #:base58check-no-checksum-error
+   ;; BECH32/BECH32M
+   #:bech32-encode
+   #:bech32-decode
+   #:bech32m-encode
+   #:bech32m-decode
+   #:bech32-checksum-error
+   #:bech32-bad-checksum-error
+   #:bech32-no-checksum-error
+   #:bech32-no-hrp-error
+   #:bech32-invalid-hrp-character-error
+   #:bech32-mixed-case-characters-error
+   #:bech32-no-separator-character-error))
 
 (in-package :bp/core/encoding)
 
@@ -264,3 +276,172 @@ part) and return the payload part."
        :if (/= (aref bytes/checksum (+ bytes-length i)) (aref hash i))
        :do (error 'base58check-bad-checksum-error))
     (make-byte-array bytes-length bytes)))
+
+;;; BECH32/BECH32M
+(define-alphabet bech32 "qpzry9x8gf2tvdw0s3jn54khce6mua7l")
+
+(define-condition bech32-error () ())
+
+(define-condition bech32-checksum-error (bech32-error checksum-error) ())
+
+(define-condition bech32-bad-checksum-error (bech32-checksum-error) ()
+  (:report "Bech32 checksum does not match."))
+
+(define-condition bech32-no-checksum-error (bech32-checksum-error) ()
+  (:report "Bech32 checksum is missing."))
+
+(define-condition bech32-no-hrp-error (bech32-error) ()
+  (:report "Bech32 HRP is missing."))
+
+(define-condition bech32-invalid-hrp-character-error (bech32-error)
+  ((character
+    :initarg :character))
+  (:report
+   (lambda (c s)
+     (format s "Invalid Bech32 HRP character: 0x~x."
+             (char-code (slot-value c 'character))))))
+
+(define-condition bech32-mixed-case-characters-error (bech32-error) ()
+  (:report "Bech32 string must be lowercase or uppercase but not mixed."))
+
+(define-condition bech32-no-separator-character-error (bech32-error) ()
+  (:report "Missing Bech32 separator character."))
+
+(defconstant +bech32-encoding-constant+           1)
+(defconstant +bech32m-encoding-constant+ #x2bc830a3)
+
+(defun bech32-polymod (values)
+  (let ((gen #(#x3b6a57b2 #x26508e6d #x1ea119fa #x3d4233dd #x2a1462b3))
+        (c 1))
+    (loop
+      :for v :across values
+      :for c0 := (ash c -25)
+      :do
+         (setf c (logxor (ash (logand c #x1ffffff) 5) v))
+         (loop
+           :for i :below 5
+           :if (not (zerop (logand c0 (ash 1 i))))
+             :do (setf c (logxor c (aref gen i)))))
+    c))
+
+(defun bech32-hrp-expand (s)
+  (let ((left  (map 'vector (lambda (c) (ash    (char-code c) -5)) s))
+        (right (map 'vector (lambda (c) (logand (char-code c) 31)) s)))
+    (concatenate 'vector left #(0) right)))
+
+(defun bech32*-verify-checksum (encoding hrp data)
+  (= (bech32-polymod (concatenate 'vector (bech32-hrp-expand hrp) data))
+     (ecase encoding
+       (:bech32  +bech32-encoding-constant+)
+       (:bech32m +bech32m-encoding-constant+))))
+
+(defun bech32*-compute-checksum (encoding hrp data)
+  (let* ((values (concatenate 'vector (bech32-hrp-expand hrp) data #(0 0 0 0 0 0)))
+         (constant (ecase encoding
+                     (:bech32  +bech32-encoding-constant+)
+                     (:bech32m +bech32m-encoding-constant+)))
+         (polymod (logxor (bech32-polymod values) constant)))
+    (loop :for i :below 6 :collect (logand (ash polymod (- (* 5 (- 5 i)))) 31))))
+
+(defmacro convert-bits (bytes &key from-bits to-bits (padp nil padp-supplied-p))
+  "Convert from one power-of-2 number base to another. We only need this to work
+with for octets for now. A direct translation from Bitcoin Core's `ConvertBits`
+function in `util/strencoding.h`."
+  (assert (and (typep from-bits 'integer) (<= 1 from-bits 8))
+          () "FROM-BITS must be an integer from 1 to 8.")
+  (assert (and (typep to-bits 'integer) (<= 1 from-bits 8))
+          () "TO-BITS must be an integer from 1 to 8.")
+  (assert padp-supplied-p
+          () "PADP must be provided explicitly.")
+  (let ((values (gensym "values"))
+        (maxv   (1- (ash 1 to-bits)))
+        (maxacc (1- (ash 1 (+ from-bits to-bits -1)))))
+    `(let* ((,values ,bytes) ;; evaluate BYTES once
+            (result  (make-array 0 :element-type '(unsigned-byte 8) :fill-pointer 0))
+            (acc     0)
+            (bits    0))
+       (loop
+         :for i  :below (length ,values)
+         :for vi := (aref ,values i)
+         :do
+            (setf acc (logand (logior (ash acc ,from-bits) vi) ,maxacc))
+            (incf bits ,from-bits)
+            (loop
+              :while (>= bits ,to-bits)
+              :do
+                 (decf bits ,to-bits)
+                 (vector-push-extend (logand (ash acc (- bits)) ,maxv) result)))
+       (if ,padp
+           (when (not (zerop bits))
+             (vector-push-extend (logand (ash acc (- ,to-bits bits)) ,maxv) result))
+           (when (or (>= bits ,from-bits)
+                     (not (zerop (logand (ash acc (- ,to-bits bits)) ,maxv))))
+             (error "Unable to convert without using padding.")))
+       (make-byte-array (length result) result))))
+
+(defun base32-encode (bytes)
+  (convert-bits bytes :from-bits 8 :to-bits 5 :padp t))
+
+(defun base32-decode (string)
+  (convert-bits string :from-bits 5 :to-bits 8 :padp nil))
+
+(defun bech32*-encode (encoding hrp bytes)
+  (let* ((data (base32-encode bytes))
+         (data-offset (1+ (length hrp)))
+         (checksum (bech32*-compute-checksum encoding hrp data))
+         (bech32 (concatenate 'vector data checksum))
+         (bech32-string-length (+ data-offset (length bech32)))
+         (bech32-string (make-string bech32-string-length)))
+    (loop
+       :for i :below (length hrp)
+       :do (setf (aref bech32-string i) (aref hrp i))
+       :finally (setf (aref bech32-string i) #\1))
+    (loop
+       :for i :below (length bech32)
+       :for c := (bech32-encode-digit (aref bech32 i))
+       :do (setf (aref bech32-string (+ data-offset i)) c))
+    bech32-string))
+
+(defun bech32*-decode (encoding string)
+  (loop
+    :with lower := nil :with upper := nil
+    :for c :across string
+    :do (cond ((<= (char-code #\a) (char-code c) (char-code #\z))
+               (setf lower t))
+              ((<= (char-code #\A) (char-code c) (char-code #\Z))
+               (setf upper t)))
+    :finally (and lower upper (error 'bech32-mixed-case-characters-error)))
+  (let ((pos (position #\1 string :test #'char= :from-end t)))
+    (when (not pos)
+      (error 'bech32-no-separator-character-error))
+    (when (zerop pos)
+      (error 'bech32-no-hrp-error))
+    (when (not (< pos (- (length string) 6)))
+      (error 'bech32-no-checksum-error))
+    (let* ((values-length (- (length string) pos 1))
+           (values (make-byte-array values-length))
+           (hrp (string-downcase (subseq string 0 pos))))
+      (loop
+        :for c :across hrp
+        :do (when (or (< (char-code c) 33) (> (char-code c) 126))
+              (error 'bech32-invalid-hrp-character-error :character c)))
+      (loop
+        :for i :below values-length
+        :do (let ((c (aref string (+ pos i 1))))
+              (setf (aref values i) (bech32-decode-digit (char-downcase c)))))
+      (unless (bech32*-verify-checksum encoding hrp values)
+        (error 'bech32-bad-checksum-error))
+      (values (base32-decode (subseq values 0 (- values-length 6))) hrp))))
+
+(defun bech32-encode (hrp bytes)
+  (bech32*-encode :bech32 hrp bytes))
+
+(defun bech32-decode (string)
+  (bech32*-decode :bech32 string))
+
+(defun bech32m-encode (hrp bytes)
+  (bech32*-encode :bech32m hrp bytes))
+
+(defun bech32m-decode (string)
+  (bech32*-decode :bech32m string))
+
