@@ -30,8 +30,6 @@
    ;; BECH32/BECH32M
    #:bech32-encode
    #:bech32-decode
-   #:bech32m-encode
-   #:bech32m-decode
    #:bech32-checksum-error
    #:bech32-bad-checksum-error
    #:bech32-no-checksum-error
@@ -126,6 +124,12 @@ from hex STRING."
          :for i :below (length contents)
          :do (setf (aref result i) (elt contents i))))
     result))
+
+(defun make-adjustable-byte-array (length)
+  (make-array length :element-type '(unsigned-byte 8) :adjustable t :fill-pointer t))
+
+(defun make-displaced-byte-array (bytes)
+  (make-array (length bytes) :element-type '(unsigned-byte 8) :displaced-to bytes))
 
 
 ;;;-----------------------------------------------------------------------------
@@ -329,13 +333,21 @@ part) and return the payload part."
         (right (map 'vector (lambda (c) (logand (char-code c) 31)) s)))
     (concatenate 'vector left #(0) right)))
 
-(defun bech32*-verify-checksum (encoding hrp data)
-  (= (bech32-polymod (concatenate 'vector (bech32-hrp-expand hrp) data))
-     (ecase encoding
-       (:bech32  +bech32-encoding-constant+)
-       (:bech32m +bech32m-encoding-constant+))))
+(defun bech32-verify-checksum (hrp data)
+  "Verify checksum using the both Bech32 and Bech32m constants.
+Return the detected encoding or NIL if neither match."
+  (case (bech32-polymod (concatenate 'vector (bech32-hrp-expand hrp) data))
+    (#.+bech32-encoding-constant+
+     ;; Detected Bech32.
+     :bech32)
+    (#.+bech32m-encoding-constant+
+     ;; Detected Bech32m.
+     :bech32m)
+    (t
+     ;; Checksum does not match either Bech32/Bech32m.
+     nil)))
 
-(defun bech32*-compute-checksum (encoding hrp data)
+(defun bech32-compute-checksum (encoding hrp data)
   (let* ((values (concatenate 'vector (bech32-hrp-expand hrp) data #(0 0 0 0 0 0)))
          (constant (ecase encoding
                      (:bech32  +bech32-encoding-constant+)
@@ -343,66 +355,55 @@ part) and return the payload part."
          (polymod (logxor (bech32-polymod values) constant)))
     (loop :for i :below 6 :collect (logand (ash polymod (- (* 5 (- 5 i)))) 31))))
 
-(defmacro convert-bits (bytes &key from-bits to-bits (padp nil padp-supplied-p))
-  "Convert from one power-of-2 number base to another. We only need this to work
-with for octets for now. A direct translation from Bitcoin Core's `ConvertBits`
-function in `util/strencoding.h`."
+(defun convert-bits (values from-bits to-bits padp output-fn)
+  "Convert from one power-of-2 number base to another. Feed each digit
+to the function OUTPUT-FN. We only need this to work for octets for
+now. A direct translation from Bitcoin Core's `ConvertBits` function
+in `util/strencoding.h`."
   (assert (and (typep from-bits 'integer) (<= 1 from-bits 8))
           () "FROM-BITS must be an integer from 1 to 8.")
   (assert (and (typep to-bits 'integer) (<= 1 from-bits 8))
           () "TO-BITS must be an integer from 1 to 8.")
-  (assert padp-supplied-p
-          () "PADP must be provided explicitly.")
-  (let ((values (gensym "values"))
-        (maxv   (1- (ash 1 to-bits)))
-        (maxacc (1- (ash 1 (+ from-bits to-bits -1)))))
-    `(let* ((,values ,bytes) ;; evaluate BYTES once
-            (result  (make-array 0 :element-type '(unsigned-byte 8) :fill-pointer 0))
-            (acc     0)
-            (bits    0))
-       (loop
-         :for i  :below (length ,values)
-         :for vi := (aref ,values i)
-         :do
-            (setf acc (logand (logior (ash acc ,from-bits) vi) ,maxacc))
-            (incf bits ,from-bits)
-            (loop
-              :while (>= bits ,to-bits)
-              :do
-                 (decf bits ,to-bits)
-                 (vector-push-extend (logand (ash acc (- bits)) ,maxv) result)))
-       (if ,padp
-           (when (not (zerop bits))
-             (vector-push-extend (logand (ash acc (- ,to-bits bits)) ,maxv) result))
-           (when (or (>= bits ,from-bits)
-                     (not (zerop (logand (ash acc (- ,to-bits bits)) ,maxv))))
-             (error "Unable to convert without using padding.")))
-       (make-byte-array (length result) result))))
+  (let* ((maxv    (1- (ash 1 to-bits)))
+         (maxacc  (1- (ash 1 (+ from-bits to-bits -1))))
+         (acc     0)
+         (bits    0))
+    (loop
+      :for i  :below (length values)
+      :for vi := (aref values i)
+      :do
+         (setf acc (logand (logior (ash acc from-bits) vi) maxacc))
+         (incf bits from-bits)
+         (loop
+           :while (>= bits to-bits)
+           :do
+              (decf bits to-bits)
+              (funcall output-fn (logand (ash acc (- bits)) maxv))))
+    (if padp
+        (when (not (zerop bits))
+          (funcall output-fn (logand (ash acc (- to-bits bits)) maxv)))
+        (when (or (>= bits from-bits)
+                  (not (zerop (logand (ash acc (- to-bits bits)) maxv))))
+          (error "Unable to convert without using padding.")))
+    t))
 
-(defun base32-encode (bytes)
-  (convert-bits bytes :from-bits 8 :to-bits 5 :padp t))
-
-(defun base32-decode (string)
-  (convert-bits string :from-bits 5 :to-bits 8 :padp nil))
-
-(defun bech32*-encode (encoding hrp bytes)
-  (let* ((data (base32-encode bytes))
-         (data-offset (1+ (length hrp)))
-         (checksum (bech32*-compute-checksum encoding hrp data))
+(defun bech32*-encode (encoding hrp data)
+  (let* ((data-offset (1+ (length hrp)))
+         (checksum (bech32-compute-checksum encoding hrp data))
          (bech32 (concatenate 'vector data checksum))
          (bech32-string-length (+ data-offset (length bech32)))
          (bech32-string (make-string bech32-string-length)))
     (loop
-       :for i :below (length hrp)
-       :do (setf (aref bech32-string i) (aref hrp i))
-       :finally (setf (aref bech32-string i) #\1))
+      :for i :below (length hrp)
+      :do (setf (aref bech32-string i) (aref hrp i))
+      :finally (setf (aref bech32-string i) #\1))
     (loop
-       :for i :below (length bech32)
-       :for c := (bech32-encode-digit (aref bech32 i))
-       :do (setf (aref bech32-string (+ data-offset i)) c))
+      :for i :below (length bech32)
+      :for c := (bech32-encode-digit (aref bech32 i))
+      :do (setf (aref bech32-string (+ data-offset i)) c))
     bech32-string))
 
-(defun bech32*-decode (encoding string)
+(defun bech32*-decode (string)
   (loop
     :with lower := nil :with upper := nil
     :for c :across string
@@ -429,19 +430,25 @@ function in `util/strencoding.h`."
         :for i :below values-length
         :do (let ((c (aref string (+ pos i 1))))
               (setf (aref values i) (bech32-decode-digit (char-downcase c)))))
-      (unless (bech32*-verify-checksum encoding hrp values)
-        (error 'bech32-bad-checksum-error))
-      (values (base32-decode (subseq values 0 (- values-length 6))) hrp))))
+      (let ((detected-encoding (bech32-verify-checksum hrp values)))
+        (unless detected-encoding
+          (error 'bech32-bad-checksum-error))
+        (values detected-encoding hrp values values-length)))))
 
-(defun bech32-encode (hrp bytes)
-  (bech32*-encode :bech32 hrp bytes))
+(defun bech32-encode (hrp bytes &key versionp bech32m-p)
+  (let ((data (make-adjustable-byte-array 0))
+        (version (when versionp (aref bytes 0)))
+        (bytes (if versionp (subseq bytes 1) bytes)))
+    (when version (vector-push-extend version data))
+    (convert-bits bytes 8 5 t (lambda (n) (vector-push-extend n data)))
+    (bech32*-encode (if bech32m-p :bech32m :bech32) hrp data)))
 
-(defun bech32-decode (string)
-  (bech32*-decode :bech32 string))
-
-(defun bech32m-encode (hrp bytes)
-  (bech32*-encode :bech32m hrp bytes))
-
-(defun bech32m-decode (string)
-  (bech32*-decode :bech32m string))
-
+(defun bech32-decode (string &key versionp)
+  (multiple-value-bind (encoding hrp values values-length)
+      (bech32*-decode string)
+    (let ((version (when versionp (aref values 0)))
+          (data (subseq values (if versionp 1 0) (- values-length 6)))
+          (bytes (make-adjustable-byte-array 0)))
+      (when version (vector-push-extend version bytes))
+      (convert-bits data 5 8 nil (lambda (n) (vector-push-extend n bytes)))
+      (values (make-displaced-byte-array bytes) hrp encoding))))
