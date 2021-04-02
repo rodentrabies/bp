@@ -45,8 +45,8 @@ script:
   # UIOP:QUIT.
   - cl -e '(cl:in-package :cl-user)'
        -e '(ql:quickload :bp/tests)'
-       -e '(setf fiveam:*debug-on-error* t)'
-       -e '(setf fiveam:*debug-on-failure* t)'
+       -e '(setf fiveam:*on-error* :debug)'
+       -e '(setf fiveam:*on-failure* :debug)'
        -e '(setf *debugger-hook*
                  (lambda (c h)
                    (declare (ignore c h))

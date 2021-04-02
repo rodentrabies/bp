@@ -172,12 +172,13 @@ message. See BIP-0152 for more info.")
            (setf (gethash ',name *message-commands*) ,command)
            (setf (gethash ,command *message-types*) ',name)
            (defstruct ,name ,@slots)
-           (export ',name)
-           (export ',constructor)
-           ,@(loop
+           (eval-when (compile load)
+             (export ',name)
+             (export ',constructor)
+             ,@(loop
                 :for slot :in slots
                 :for accessor := (combine-symbols name '- slot)
-                :collect `(export ',accessor))
+                :collect `(export ',accessor)))
 
            ;; Additional utils depending on OPTIONS values.
            ,@(when not-implemented
@@ -190,6 +191,7 @@ message. See BIP-0152 for more info.")
                  ;; should not fail - such messages will usually be
                  ;; silently ignored.
                  (defmethod parse ((message-class (eql ',name)) stream)
+                   (declare (ignore stream))
                    (,constructor)))))))))
 
 
@@ -260,9 +262,11 @@ message. See BIP-0152 for more info.")
 
 (defmessage verack-message ())
 
-(defmethod serialize ((message verack-message) stream))
+(defmethod serialize ((message verack-message) stream)
+  (declare (ignore stream)))
 
 (defmethod parse ((message-class (eql 'verack-message)) stream)
+  (declare (ignore stream))
   (make-verack-message))
 
 

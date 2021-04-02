@@ -230,7 +230,8 @@ single peer via peer-2-peer gossip protocol."))
      :do (handle-message node peer message)
      :finally (return message)))
 
-(defmethod handle-message ((node simple-node) (peer peer) message))
+(defmethod handle-message ((node simple-node) (peer peer) message)
+  (declare (ignore message)))
 
 (defmethod handle-message ((node simple-node) (peer peer) (message ping-message))
   (send-message node peer (make-pong-message :nonce (ping-message-nonce message))))
@@ -238,7 +239,7 @@ single peer via peer-2-peer gossip protocol."))
 ;;; Chain supplier interface implementation
 
 (defmethod chain-get-block-hash ((node simple-node) height &key encoded errorp)
-  (declare (ignore encoded errorp))
+  (declare (ignore height encoded errorp))
   (error "SIMPLE-NODE chain supplier does not support retrieving block hashes by height."))
 
 (defmethod chain-get-block ((node simple-node) hash &key encoded errorp)

@@ -39,7 +39,7 @@ level until it has length 1. Return a resulting root node."
        :do
          (setf next-layer nil)
          (loop
-            :for (left . (right-or-nil . _)) :on current-layer :by #'cddr
+            :for (left . (right-or-nil . nil)) :on current-layer :by #'cddr
             :for right := (or right-or-nil left)
             :do
               (push (parent left right) next-layer))
