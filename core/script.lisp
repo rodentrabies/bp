@@ -11,6 +11,7 @@
    #:make-script
    #:make-script-state
    #:script-commands
+   #:script-standard-p
    #:execute-scripts
    #:execute-script
    #:*trace-script-execution*))
@@ -92,6 +93,15 @@ otherwise."
   (if (consp command)
       (car command)
       command))
+
+(defun command-number (command)
+  (let ((code (command-op command)))
+    (cond ((= code 0)
+           0)
+          ((<= 81 code 96)
+           (- code 80))
+          (t
+           nil))))
 
 (defun command-payload (command)
   (if (consp command)
@@ -232,19 +242,53 @@ the best effort to detect/convert the provided values."
 (defmethod print-object ((condition script-non-standard-error) stream)
   (format stream "Non-standard script: ~a." (script-error-script condition)))
 
+(defun p2pk-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a standard obsolete p2pk
+pattern:
+    <pubkkey>
+    OP_CHECKSIG"
+  (let ((commands (script-commands script-pubkey)))
+    (and (= (length commands) 2)
+         (command-payload (aref commands 0))
+         (= (command-op (aref commands 1)) (opcode :op_checksig)))))
+
+(defun p2ms-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a standard obsolete p2ms
+pattern:
+    OP_<N>
+    <key 1>
+    ...
+    <key M>
+    OP_<M>
+    OP_CHECKMULTISIG"
+  (let* ((commands (script-commands script-pubkey))
+         (length (length commands)))
+    (and (>= length 3)
+         (command-number (aref commands 0))
+         (command-number (aref commands (- length 2)))
+         (= (command-op (aref commands (- length 1))) (opcode :op_checkmultisig))
+         (every #'command-payload (subseq commands 1 (- length 2))))))
+
+(defun null-data-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY is a NULL DATA script."
+  (let ((commands (script-commands script-pubkey)))
+    (and (= (length commands) 2)
+         (= (command-op (aref commands 0)) (opcode :op_return))
+         (command-payload (aref commands 1)))))
+
 (defun p2pkh-p (script-pubkey)
   "Check if current SCRIPT-PUBKEY indicates a standard p2pkh pattern:
     OP_DUP
     OP_HASH160
     <hash160>
-    OP_EQUAL
+    OP_EQUALVERIFY
     OP_CHECKSIG"
   (let ((commands (script-commands script-pubkey)))
     (and (= (length commands) 5)
          (= (command-op (aref commands 0)) (opcode :op_dup))
          (= (command-op (aref commands 1)) (opcode :op_hash160))
          (command-payload (aref commands 2)) ;; NIL if not a push op
-         (= (command-op (aref commands 3)) (opcode :op_equal))
+         (= (command-op (aref commands 3)) (opcode :op_equalverify))
          (= (command-op (aref commands 4)) (opcode :op_checksig)))))
 
 (defun p2sh-p (script-pubkey)
@@ -296,6 +340,52 @@ script structure:
    (segwit-p script-pubkey)
    (=  0 (aref (script-commands script-pubkey) 0))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
+
+(defun script-standard-p (script-pubkey &key network)
+  "If given script is standard, return a common name for the script type (:P2SH,
+:P2PKH, :P2WSH, etc) or T, otherwise return NIL. Additionally, if the address
+format is defined for that type of script, return a Bitcoin address for a given
+script as a second value."
+  (let ((commands (script-commands script-pubkey)))
+    (cond
+      ((or (p2wpkh-p script-pubkey)
+           (p2wsh-p script-pubkey))
+       (if *bip-0141-active-p*
+           (let* ((hrp (ecase network
+                         (:mainnet "bc")
+                         (:testnet "tb")))
+                  (witness-version (command-number (aref commands 0)))
+                  (payload (command-payload (aref commands 1)))
+                  (full-payload (concatenate 'vector (vector witness-version) payload))
+                  (address (bech32-encode hrp full-payload :versionp t)))
+             (values t address))
+           (values nil nil)))
+      ((p2sh-p script-pubkey)
+       (if *bip-0016-active-p*
+           (let* ((version (ecase network
+                             (:mainnet 5)
+                             (:testnet 196)))
+                  (payload (command-payload (aref commands 1)))
+                  (full-payload (concatenate 'vector (vector version) payload))
+                  (address (base58check-encode full-payload)))
+             (values :p2sh address))
+           (values nil nil)))
+      ((p2pkh-p script-pubkey)
+       (let* ((version (ecase network
+                         (:mainnet 0)
+                         (:testnet 111)))
+              (payload (command-payload (aref commands 2)))
+              (full-payload (concatenate 'vector (vector version) payload))
+              (address (base58check-encode full-payload)))
+         (values :p2pkh address)))
+      ((p2pk-p script-pubkey)
+       (values :p2pk nil))
+      ((p2ms-p script-pubkey)
+       (values :p2ms nil))
+      ((null-data-p script-pubkey)
+       (values :null-data nil))
+      (t
+       (values nil nil)))))
 
 
 ;;;-----------------------------------------------------------------------------
