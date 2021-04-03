@@ -64,7 +64,7 @@ provided block data to the corresponding lookup structures."
        (setf (gethash ,hash *test-chain-blocks*) ,hex)
        (pushnew ,height *all-test-blocks* :test #'equal))
      (defvar ,name ,height)
-     (eval-when (compile load)
+     (eval-when (:compile-toplevel :load-toplevel)
        (export ',name))))
 
 (defmacro add-test-transaction (name &body (hash hex))
@@ -75,7 +75,7 @@ provided transaction data to the corresponding lookup structures."
        (setf (gethash ,hash *test-chain-transactions*) ,hex)
        (pushnew ,hash *all-test-transactions* :test #'equal))
      (defvar ,name ,hash)
-     (eval-when (compile load)
+     (eval-when (:compile-toplevel :load-toplevel)
        (export ',name))))
 
 

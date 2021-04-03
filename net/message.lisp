@@ -172,7 +172,7 @@ message. See BIP-0152 for more info.")
            (setf (gethash ',name *message-commands*) ,command)
            (setf (gethash ,command *message-types*) ',name)
            (defstruct ,name ,@slots)
-           (eval-when (compile load)
+           (eval-when (:compile-toplevel :load-toplevel)
              (export ',name)
              (export ',constructor)
              ,@(loop
