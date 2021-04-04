@@ -13,7 +13,7 @@
 [getdata-docs]: https://en.bitcoin.it/wiki/Protocol_documentation#getdata
 
 [![Quicklisp](http://quickdocs.org/badge/bp.svg)](https://quickref.common-lisp.net/bp.html)
-[![Build Status](https://travis-ci.com/rodentrabies/bp.svg)](https://travis-ci.com/rodentrabies/bp)
+[![Build Status](https://travis-ci.com/rodentrabies/bp.svg?branch=master)](https://travis-ci.com/rodentrabies/bp)
 
 This is a Common Lisp implementation of the various components of the
 Bitcoin Protocol. The serialization and deserialization utils may be
@@ -318,6 +318,6 @@ CL-USER> (bp:chain-get-block *node* <block-hash>)
 <a id="license"></a>
 ## License
 
-Copyright (c) 2019-2021 Seibart Nedor <rodentrabies@protonmail.com>
+Copyright (c) 2019-2021 Seibart Nedor \<rodentrabies@protonmail.com\>
 
 Licensed under MIT License. See [LICENSE](LICENSE).
