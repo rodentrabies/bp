@@ -46,7 +46,7 @@
   payload)
 
 (defun command-to-bytes (command)
-  (let ((bytes (make-array 12 :element-type '(unsigned-byte 8) :initial-element 0))
+  (let ((bytes (make-byte-array 12))
         (command-bytes (ironclad:ascii-string-to-byte-array command)))
     (loop :for i :below (length command-bytes) :do (setf (aref bytes i) (aref command-bytes i)))
     bytes))

@@ -97,11 +97,7 @@ extend it with additional data if supplied."
 
 (defun block-difficulty (block)
   (let ((current-target (bits-to-target (block-bits block)))
-        (max-target
-         (bits-to-target
-          (make-array
-           4 :element-type '(unsigned-byte 8)
-           :initial-contents #(#x1d #x00 #xff #xff)))))
+        (max-target (bits-to-target (make-byte-array 4 #(#x1d #x00 #xff #xff)))))
     (float
      (/ (ironclad:octets-to-integer max-target :big-endian nil)
         (ironclad:octets-to-integer current-target :big-endian nil)))))
@@ -158,8 +154,7 @@ extend it with additional data if supplied."
       ;;    https://bitcointalk.org/index.php?topic=260595.0
       ;; for an explanation.
       (when (< (length (tx-outputs tx)) (length (tx-inputs tx)))
-        (let ((fhash (make-array 32 :element-type '(unsigned-byte 8)
-                                 :initial-element 0)))
+        (let ((fhash (make-byte-array 32)))
           (setf (aref fhash 31) 1)
           (return-from tx-sighash-base fhash)))
       ;; Resize output vector to TXIN-INDEX + 1 outputs.
@@ -200,7 +195,7 @@ extend it with additional data if supplied."
             :do
               (write-bytes prev-id stream 32)
               (write-int prev-index stream :size 4 :byte-order :little))))
-      (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0)))
+      (make-byte-array 32)))
 
 (defun tx-sequence-hash (tx sighash-type)
   (if (and (zerop (logand sighash-type +sighash-anyonecanpay+))
@@ -212,7 +207,7 @@ extend it with additional data if supplied."
             :for txin :across (tx-inputs tx)
             :for sequence := (txin-sequence txin)
             :do (write-int sequence stream :size 4 :byte-order :little))))
-      (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0)))
+      (make-byte-array 32)))
 
 (defun tx-outputs-hash (tx txin-index sighash-type)
   (cond
@@ -229,7 +224,7 @@ extend it with additional data if supplied."
       (ironclad:with-octet-output-stream (stream)
         (serialize (tx-output tx txin-index) stream))))
     (t
-     (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0))))
+     (make-byte-array 32))))
 
 (defun tx-sighash-witness-v0 (tx txin-index amount script-code sighash-type)
   "Compute sighash for version 0 witness transactions in BIP-0143 (see the
@@ -352,8 +347,7 @@ Assumes chain supplier context."
                      (bip34-height         (decode-integer (cdr bip34-height-command))))
                 (unless (= bip34-height height)
                   (error "BIP-0034: coinbase must include block height."))))
-            (unless (equalp (txin-previous-tx-id txin)
-                            (make-array 32 :element-type '(unsigned-byte 8) :initial-element 0))
+            (unless (equalp (txin-previous-tx-id txin) (make-byte-array 32))
               (error "Coinbase previous tx id must be 0."))
             (unless (= (txin-previous-tx-index txin) #xffffffff)
               (error "Coinbase previous tx index must be 0xFFFFFFFF."))

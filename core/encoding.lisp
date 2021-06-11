@@ -13,6 +13,7 @@
    #:write-int
    #:read-varint
    #:write-varint
+   #:make-byte-array
    ;; Encoding
    ;; Generic:
    #:checksum-error
@@ -68,7 +69,7 @@ from hex STRING."
 ;;; Parsing/serialization utils
 
 (defun read-bytes (stream size)
-  (let ((bytes (make-array size :element-type '(unsigned-byte 8))))
+  (let ((bytes (make-byte-array size)))
     (read-sequence bytes stream)
     bytes))
 
@@ -118,7 +119,7 @@ from hex STRING."
 
 
 (defun make-byte-array (length &optional contents)
-  (let ((result (make-array length :element-type '(unsigned-byte 8))))
+  (let ((result (make-array length :element-type '(unsigned-byte 8) :initial-element 0)))
     (when contents
       (loop
          :for i :below (length contents)

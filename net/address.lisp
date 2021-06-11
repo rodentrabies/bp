@@ -1,4 +1,5 @@
 (uiop:define-package :bp/net/address (:use :cl)
+  (:use :bp/core/encoding)
   (:import-from :usocket)
   (:export
    ;; Address utilities:
@@ -20,7 +21,7 @@
 
 ;; NOTE: currently only supports IPv4 addresses.
 (defun address-to-bytes (address)
-  (let ((bytes (make-array 16 :element-type '(unsigned-byte 8) :initial-element 0)))
+  (let ((bytes (make-byte-array 16)))
     ;; IPv4-mapped IPv6 address.
     (setf (aref bytes 10) #xff)
     (setf (aref bytes 11) #xff)

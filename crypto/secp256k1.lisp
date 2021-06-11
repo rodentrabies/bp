@@ -354,7 +354,7 @@
 implements DER parsing for ECDSA signatures, while supporting an
 arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (let* ((inputlen (length input))
-         (tmpsig   (make-array 64 :element-type '(unsigned-byte 8)))
+         (tmpsig   (make-array 64 :element-type '(unsigned-byte 8) :initial-element 0))
          (sig      (ecdsa-signature-parse-compact tmpsig))
          pos lenbyte rpos rlen spos slen overflow)
     (macrolet ((%fail ()
