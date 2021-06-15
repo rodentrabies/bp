@@ -337,16 +337,13 @@ part) and return the payload part."
 (defun bech32-verify-checksum (hrp data)
   "Verify checksum using the both Bech32 and Bech32m constants.
 Return the detected encoding or NIL if neither match."
-  (case (bech32-polymod (concatenate 'vector (bech32-hrp-expand hrp) data))
-    (#.+bech32-encoding-constant+
-     ;; Detected Bech32.
-     :bech32)
-    (#.+bech32m-encoding-constant+
-     ;; Detected Bech32m.
-     :bech32m)
-    (t
-     ;; Checksum does not match either Bech32/Bech32m.
-     nil)))
+  (let ((polymod (bech32-polymod (concatenate 'vector (bech32-hrp-expand hrp) data))))
+    (cond ((= polymod +bech32-encoding-constant+)
+           :bech32)
+          ((= polymod +bech32m-encoding-constant+)
+           :bech32m)
+          (t
+           nil))))
 
 (defun bech32-compute-checksum (encoding hrp data)
   (let* ((values (concatenate 'vector (bech32-hrp-expand hrp) data #(0 0 0 0 0 0)))
