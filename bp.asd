@@ -1,16 +1,22 @@
 (defsystem "bp"
   :description "Bitcoin Protocol components in Common Lisp"
   :version "0.0.2"
-  :author "whythat <whythat@protonmail.com>"
+  :author "Seibart Nedor <rodentrabies@protonmail.com>"
   :license "MIT"
   :class :package-inferred-system
   :pathname #P"./"
+  :in-order-to ((test-op (test-op "bp/tests")))
+  ;; Components:
   :depends-on ("bp/core/all"
                "bp/crypto/all"
-               "bp/net/all")
-  :in-order-to ((test-op (test-op "bp/tests")))
-  ;; External dependencies.
-  :depends-on ("cffi" "aserve" "jsown" "ironclad" "usocket"))
+               "bp/net/all"
+               "bp/rpc/all")
+  ;; External dependencies:
+  :depends-on ("cffi"
+               "aserve"
+               "jsown"
+               "ironclad"
+               "usocket"))
 
 
 
@@ -18,7 +24,9 @@
   :description "Test system for BP."
   :class :package-inferred-system
   :pathname #P "./tests"
-  :depends-on ("bp" "bp/tests/all")
   :perform (test-op (o c) (uiop:symbol-call :fiveam :run-all-tests))
-  ;; External dependencies.
+  ;; Components:
+  :depends-on ("bp"
+               "bp/tests/all")
+  ;; External dependencies:
   :depends-on ("fiveam"))

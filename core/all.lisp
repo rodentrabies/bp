@@ -8,4 +8,6 @@
    :bp/core/chain
    :bp/core/merkletree
    :bp/core/parameters
-   :bp/core/consensus))
+   :bp/core/consensus)
+  ;; For backward compatibility purposes (see rpc/all.lisp).
+  (:export #:node-connection))

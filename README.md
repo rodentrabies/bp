@@ -34,11 +34,14 @@ CASES.**
 <a id="table-of-contents"></a>
 ## Table of Contents
 - [Installation](#installation)
-- [Interface](#interface)
+- [Core](#interface)
   - [Chain interface](#chain-interface)
-  - [Model and serialization](#model-and-serialization)
+  - [Model](#model)
+  - [Serialization](#serialization)
   - [Validation](#validation)
-- [Peer-to-peer network](#peer-to-peer-network)
+- [Network](#network)
+- [RPC](#rpc)
+- [API changes](#api-changes)
 - [License](#license)
 
 
@@ -84,8 +87,8 @@ CL-USER> (asdf:load-system "bp")
 ```
 
 
-<a id="interface"></a>
-## Interface
+<a id="core"></a>
+## Core
 
 Currently this library only provides utilities for stateless
 interaction with Bitcoin from REPL. Storage, wallet and full node
@@ -105,7 +108,7 @@ allow to pull chain data from any external supplier specified with the
 `bp:with-chain-supplier` macro:
 
 ``` lisp
-CL-USER> (bp:with-chain-supplier (bp:node-connection
+CL-USER> (bp:with-chain-supplier (bprpc:node-rpc-connection
                                   :url "http://localhost:8332"
                                   :username "btcuser"
                                   :password "btcpassword")
@@ -127,8 +130,8 @@ Under the hood, these operations call corresponding generic functions
 object as an explicit first argument.
 
 
-<a id="model-and-serialization"></a>
-### Model and serialization
+<a id="model"></a>
+### Model
 
 Bitcoin data entities are represented by the following structures:
   - `bp:block-header`,
@@ -141,6 +144,9 @@ Bitcoin data entities are represented by the following structures:
 Functions named `bp:block-*` (both for `bp:block-header` and
 `bp:cblock`), `bp:tx-*`, `bp:txin-*` and `bp:txout-*` provide access
 to the components of the corresponding entities.
+
+<a id="serialization"></a>
+### Serialization
 
 Functions `bp:parse` and `bp:serialize` can be used to read and write
 any Bitcoin entity from and to any octet stream respectively:
@@ -249,8 +255,8 @@ T
 ```
 
 
-<a id="peer-to-peer-network"></a>
-## Peer-to-peer network
+<a id="network"></a>
+## Network
 
 **BP** provides simple utilities for interacting with Bitcoin
 network - a subset of network messages and functions for establishing
@@ -313,6 +319,42 @@ clients from assuming all nodes keep full transaction indexes).
 CL-USER> (bp:chain-get-block *node* <block-hash>)
 ...
 ```
+
+
+
+<a id="rpc"></a>
+## RPC
+
+`bprpc` package provides that `bprpc:node-rpc-connection` class which
+is is an RPC client to the `bitcoind` RPC server. It was mentioned
+above as one of the implementations of the chain supplier interface,
+but it also supports the following RPC operations that correspond to
+the `bitcoind` RPC methods (and `bitcoin-cli` commands) with the same
+name:
+
+- `bprpc:getblockhash`;
+- `bprpc:getblock`;
+- `bprpc:getrawtransaction`;
+- `bprpc:getchaintxstats`.
+
+Note that results of RPC operations are `jsown` JSON structures, so
+specific parts of these structures have to be extracted manually:
+
+``` lisp
+cl-user> (let* ((node-connection (make-instance 'bprpc:node-rpc-connection :url <url>))
+                (chain-stats (bprpc:getchaintxstats node-connection))
+                (chain-blocks (jsown:val chain-stats "window_final_block_height"))
+                (chain-txs (jsown:val chain-stats "txcount")))
+           (format t "Blocks: ~a, transactions: ~a~%" chain-blocks chain-txs))
+```
+
+
+
+<a id="change-log"></a>
+## API changes
+
+See [CHANGELOG.md](CHANGELOG.md).
+
 
 
 <a id="license"></a>

@@ -1,20 +1,23 @@
 (uiop:define-package :bp/core/chain (:use :cl)
-  (:import-from :aserve)
-  (:import-from :jsown)
   (:use :bp/core/block
         :bp/core/transaction
         :bp/core/encoding)
   (:export
    ;; Chain supplier API:
+   #:*chain-supplier*
+   #:chain-supplier
    #:with-chain-supplier
    #:chain-testnet-p
    #:chain-get-block-hash
    #:chain-get-block
    #:chain-get-transaction
+   #:network
    #:testnet-p
    #:get-block-hash
    #:get-block
    #:get-transaction
+   ;; Chain supplier helpers:
+   #:with-chain-supplier-normalization
    ;; Chain supplier conditions:
    #:unknown-entity-error
    #:unknown-block-hash-error
@@ -22,11 +25,7 @@
    #:unknown-block-error
    #:unknown-block-hash
    #:unknown-transaction-error
-   #:unknown-transaction-id
-   ;; Available chain suppliers/helpers:
-   #:chain-supplier
-   #:node-connection
-   #:with-chain-supplier-normalization))
+   #:unknown-transaction-id))
 
 (in-package :bp/core/chain)
 
@@ -67,6 +66,12 @@
   (:report
    (lambda (e s)
      (format s "Unknown transaction ~a." (unknown-transaction-id e)))))
+
+(defgeneric chain-network (supplier)
+  (:documentation "Return keyword representing the given SUPPLIER's
+network (one of :MAINNET, :TESTNET, :REGTEST).")
+  (:method (supplier)
+    (chain-supplier-network supplier)))
 
 (defgeneric chain-testnet-p (supplier)
   (:documentation "Return NIL if SUPPLIER's network is :MAINNET and T
@@ -165,107 +170,6 @@ instead of the default error type."
 
 
 ;;;-----------------------------------------------------------------------------
-;;; Node-connection chain supplier implementation
-
-(defclass node-connection (chain-supplier)
-  ((url
-    :accessor node-connection-url
-    :initarg :url)
-   (username
-    :accessor node-connection-username
-    :initarg :username)
-   (password
-    :accessor node-connection-password
-    :initarg :password)))
-
-(define-condition node-connection-error (simple-error)
-  ((code
-    :initarg :code
-    :reader node-connection-error-code)
-   (message
-    :initarg :message
-    :reader node-connection-error-message))
-  (:report
-   (lambda (e s)
-     (let ((code (node-connection-error-code e))
-           (message (node-connection-error-message e)))
-       (format s "Node connection error: HTTP status ~a~@[ (~a)~]"
-               code
-               (when (plusp (length message)) message))))))
-
-(define-condition rpc-error (node-connection-error)
-  ()
-  (:report
-   (lambda (e s)
-     (let ((code (node-connection-error-code e))
-           (message (node-connection-error-message e)))
-       (format s "Node connection error: RPC code ~a (~a)"
-               code message)))))
-
-(defun do-simple-rpc-call (supplier method &rest arguments)
-  (let* ((user (node-connection-username supplier))
-         (password (node-connection-password supplier))
-         (authorization (cons user password))
-         (content
-          (format nil
-                  "{                            ~
-                     \"jsonrpc\": \"1.0\",      ~
-                     \"method\":  \"~a\",       ~
-                     \"params\":  [~{~s~^, ~}], ~
-                     \"id\":      \"bp\"        ~
-                   }"
-                  method
-                  arguments)))
-    (multiple-value-bind (response status)
-        (net.aserve.client:do-http-request (node-connection-url supplier)
-          :basic-authorization authorization
-          :method :post
-          :content content
-          :content-type "text/plain")
-      (cond ((= status 200)
-             (jsown:val (jsown:parse response) "result"))
-            ((= status 500)
-             (let* ((errorinfo (jsown:val (jsown:parse response) "error"))
-                    (code (jsown:val errorinfo "code"))
-                    (message (jsown:val errorinfo "message")))
-               (error 'rpc-error :code code :message message)))
-            (t
-             (error 'node-connection-error :code status :message response))))))
-
-(defmacro ignore-rpc-errors (&body body)
-  `(handler-case
-       (progn ,@body)
-     (rpc-error (e)
-       (values nil e))))
-
-(defmethod chain-get-block-hash ((supplier node-connection) height &key (encoded t) errorp)
-  (with-chain-supplier-normalization (height encoded errorp
-                                      :entity-type :block-hash
-                                      :id-type     :as-is
-                                      :body-type   :encoded)
-    (ignore-rpc-errors
-      (do-simple-rpc-call supplier "getblockhash" height))))
-
-(defmethod chain-get-block ((supplier node-connection) hash &key encoded errorp)
-  (with-chain-supplier-normalization (hash encoded errorp
-                                      :entity-type :block
-                                      :id-type     :encoded
-                                      :body-type   :encoded)
-    (ignore-rpc-errors
-      ;; Second argument (0) tells Bitcoin RPC handler to return raw
-      ;; hex-encoded block.
-      (do-simple-rpc-call supplier "getblock" hash 0))))
-
-(defmethod chain-get-transaction ((supplier node-connection) id &key encoded errorp)
-  (with-chain-supplier-normalization (id encoded errorp
-                                      :entity-type :transaction
-                                      :id-type     :encoded
-                                      :body-type   :encoded)
-    (ignore-rpc-errors
-      (do-simple-rpc-call supplier "getrawtransaction" id))))
-
-
-;;;-----------------------------------------------------------------------------
 ;;; Context-dependent API
 
 (defvar *chain-supplier* nil
@@ -274,6 +178,9 @@ instead of the default error type."
 (defmacro with-chain-supplier ((type &rest args &key &allow-other-keys) &body body)
   `(let ((*chain-supplier* (make-instance ',type ,@args)))
      ,@body))
+
+(defun network ()
+  (chain-network *chain-supplier*))
 
 (defun testnet-p ()
   (chain-testnet-p *chain-supplier*))
