@@ -41,6 +41,7 @@ CASES.**
   - [Validation](#validation)
 - [Network](#network)
 - [RPC](#rpc)
+- [Examples](#examples)
 - [API changes](#api-changes)
 - [License](#license)
 
@@ -347,6 +348,10 @@ cl-user> (let* ((node-connection (make-instance 'bprpc:node-rpc-connection :url 
                 (chain-txs (jsown:val chain-stats "txcount")))
            (format t "Blocks: ~a, transactions: ~a~%" chain-blocks chain-txs))
 ```
+<a id="examples"></a>
+## Examples
+
+- [BPRDF - Bitcoin chain data represented as RDF](examples/bprdf/)
 
 
 
