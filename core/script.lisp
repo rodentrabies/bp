@@ -14,6 +14,7 @@
    #:script-standard-p
    #:execute-scripts
    #:execute-script
+   ;; #:*print-script-as-assembly* ;; not exported yet
    #:*trace-script-execution*))
 
 (in-package :bp/core/script)
@@ -182,17 +183,25 @@ otherwise."
            (incf i)))
     (make-script :commands (coerce (reverse commands) 'vector))))
 
+(defvar *print-script-as-assembly* nil
+  "If non-NIL, the script will be printed without Lisp object wrapping.")
+
 (defmethod print-object ((script script) stream)
-  (flet ((print-command (c)
+  (flet ((print-command  (c)
            (cond ((and (consp c) (eq (car c) :unexpected_end))
                   (format nil "UNEXPECTED_END ~a" (hex-encode (cdr c))))
                  ((consp c)
-                  (format nil "~{~a~^/~} ~a" (opcode (car c)) (hex-encode (cdr c))))
+                  (if *print-script-as-assembly*
+                      (format nil "~a" (hex-encode (cdr c)))
+                      (format nil "~{~:@(~a~)~^/~} ~a"
+                              (opcode (car c)) (hex-encode (cdr c)))))
                  (t
-                  (format nil "~{~a~^/~}" (opcode c))))))
-   (print-unreadable-object (script stream :type t)
-     (format stream "<~{~a~^ ~}>"
-             (map 'list #'print-command (script-commands script))))))
+                  (format nil "~{~:@(~a~)~^/~}" (opcode c))))))
+    (let ((commands (map 'list #'print-command (script-commands script))))
+      (if *print-script-as-assembly*
+          (format stream "~{~a~^ ~}" commands)
+          (print-unreadable-object (script stream :type t)
+            (format stream "<~{~a~^ ~}>" commands))))))
 
 (defun script (&rest symbolic-commands)
   "Construct a SCRIPT object from a sequence of Lisp objects, doing
