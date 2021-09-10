@@ -1,6 +1,6 @@
 (defsystem "bp"
   :description "Bitcoin Protocol components in Common Lisp"
-  :version "0.0.2"
+  :version "0.0.3"
   :author "Seibart Nedor <rodentrabies@protonmail.com>"
   :license "MIT"
   :class :package-inferred-system
