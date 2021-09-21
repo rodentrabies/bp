@@ -13,7 +13,7 @@ as consistent as possible.
 ## BP 0.0.3
 
 - The RPC-based chain supplier `bp:node-connection` was renamed to
-  `bp:node-rpc-connection` for clarity. It is still possible to use
+  `bprpc:node-rpc-connection` for clarity. It is still possible to use
   the `bp:node-connection` name, but it will issue a warning and will
   be removed in one of the next `0.0.*` releases.
 
