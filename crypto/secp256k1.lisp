@@ -5,6 +5,9 @@
    ;; Ironclad's symbols
    #:make-signature
    #:verify-signature)
+  (:import-from
+   :cffi
+   #:foreign-library-undefined-error)
   (:export
    ;; Signature API
    #:ecdsa-sign
@@ -89,7 +92,27 @@
 (define-foreign-library libsecp256k1
   (t (:default "libsecp256k1")))
 
-(use-foreign-library libsecp256k1)
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (defun report-secp256k1-not-found (_ stream)
+    (declare (ignore _))
+    (format stream "secp256k1 API is disabled: C library is not available.")))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (define-condition secp256k1-not-found-warning (simple-warning) ()
+    (:report report-secp256k1-not-found)))
+
+(define-condition secp256k1-not-found-error (simple-error) ()
+  (:report report-secp256k1-not-found))
+
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (handler-case
+      (progn
+        (use-foreign-library libsecp256k1)
+        (push :secp256k1 *features*))
+    (load-foreign-library-error ()
+      (warn 'secp256k1-not-found-warning))
+    (foreign-library-undefined-error ()
+      (warn 'secp256k1-not-found-warning))))
 
 ;; Opaque data structure that holds a parsed and valid public key.
 ;;
@@ -99,7 +122,7 @@
 ;; If you need to convert to a format suitable for storage, transmission, or
 ;; comparison, use secp256k1_ec_pubkey_serialize and secp256k1_ec_pubkey_parse.
 (defcstruct secp256k1-pubkey
-    (data :unsigned-char :count 64))
+  (data :unsigned-char :count 64))
 
 ;; Opaque data structured that holds a parsed ECDSA signature.
 ;;
@@ -192,12 +215,18 @@
   (seed32 (:pointer :unsigned-char)))
 
 (defun context-create-none ()
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (secp256k1-context-create +secp256k1-context-none+))
 
 (defun context-create-verify ()
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (secp256k1-context-create +secp256k1-context-verify+))
 
 (defun context-create-sign ()
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let ((ctx (secp256k1-context-create +secp256k1-context-sign+))
         (seed32 (random-bytes 32)))
     (with-foreign-objects
@@ -207,9 +236,9 @@
               () "Sign context randomization error.")
       ctx)))
 
-(defvar *context-none*   (context-create-none))
-(defvar *context-verify* (context-create-verify))
-(defvar *context-sign*   (context-create-sign))
+(defvar *context-none*   #+sepc256k1 (context-create-none))
+(defvar *context-verify* #+sepc256k1 (context-create-verify))
+(defvar *context-sign*   #+sepc256k1 (context-create-sign))
 
 ;; Create a secp256k1 scratch space object.
 ;;
@@ -247,6 +276,9 @@
   (inputlen size-t))
 
 (defun ec-pubkey-parse (input)
+  #-secp256k1 (declare (ignore input))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let ((inputlen (length input)))
     (with-foreign-objects
         ((cpubkey '(:struct secp256k1-pubkey))
@@ -278,6 +310,9 @@
   (flags :unsigned-int))
 
 (defun ec-pubkey-serialize (pubkey &key compressed)
+  #-secp256k1 (declare (ignore pubkey compressed))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let ((outputlen (if compressed 33 65)))
     (with-foreign-objects
         ((coutput :unsigned-char outputlen)
@@ -311,6 +346,9 @@
   (input64 (:pointer :unsigned-char)))
 
 (defun ecdsa-signature-parse-compact (input64)
+  #-secp256k1 (declare (ignore input64))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((csignature '(:struct secp256k1-ecdsa-signature))
        (cinput64 :unsigned-char 64))
@@ -340,6 +378,9 @@
   (inputlen size-t))
 
 (defun ecdsa-signature-parse-der (input)
+  #-secp256k1 (declare (ignore input))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let ((inputlen (length input)))
     (with-foreign-objects
         ((csignature '(:struct secp256k1-ecdsa-signature))
@@ -353,6 +394,9 @@
   "This function is taken from the libsecp256k1 distribution and
 implements DER parsing for ECDSA signatures, while supporting an
 arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
+  #-secp256k1 (declare (ignore input))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let* ((inputlen (length input))
          (tmpsig   (make-array 64 :element-type '(unsigned-byte 8) :initial-element 0))
          (sig      (ecdsa-signature-parse-compact tmpsig))
@@ -460,6 +504,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (sig (:pointer (:struct secp256k1-ecdsa-signature))))
 
 (defun ecdsa-signature-serialize-der (signature)
+  #-secp256k1 (declare (ignore signature))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((coutput :unsigned-char 74)
        (coutputlen 'size-t 1)
@@ -484,6 +531,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (sig (:pointer (:struct secp256k1-ecdsa-signature))))
 
 (defun ecdsa-signature-serialize-compact (signature)
+  #-secp256k1 (declare (ignore signature))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((coutput :unsigned-char 64)
        (csignature '(:struct secp256k1-ecdsa-signature)))
@@ -517,6 +567,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 
 (defun ecdsa-verify (signature msg32 pubkey)
   "Verify an ECDSA signature."
+  #-secp256k1 (declare (ignore signature msg32 pubkey))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((csignature '(:struct secp256k1-ecdsa-signature))
        (cmsg32 :unsigned-char 32)
@@ -575,6 +628,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (sigin (:pointer (:struct secp256k1-ecdsa-signature))))
 
 (defun ecdsa-signature-normalize (sigin)
+  #-secp256k1 (declare (ignore sigin))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((csigout '(:struct secp256k1-ecdsa-signature))
        (csigin '(:struct secp256k1-ecdsa-signature)))
@@ -606,6 +662,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 
 (defun ecdsa-sign (msg32 seckey)
   "Create an ECDSA signature."
+  #-secp256k1 (declare (ignore msg32 seckey))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((csignature '(:struct secp256k1-ecdsa-signature))
        (cmsg32 :unsigned-char 32)
@@ -627,6 +686,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (seckey (:pointer :unsigned-char)))
 
 (defun ec-seckey-verify (seckey)
+  #-secp256k1 (declare (ignore seckey))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((cseckey :unsigned-char 32))
     (bytes-to-foreign seckey cseckey 32)
@@ -646,6 +708,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (seckey (:pointer :unsigned-char)))
 
 (defun ec-pubkey-create (seckey)
+  #-secp256k1 (declare (ignore seckey))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((cpubkey '(:struct secp256k1-pubkey))
        (cseckey :unsigned-char 32))
@@ -663,6 +728,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (seckey (:pointer :unsigned-char)))
 
 (defun ec-privkey-negate (seckey)
+  #-secp256k1 (declare (ignore seckey))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((cseckey :unsigned-char 32))
     (bytes-to-foreign seckey cseckey 32)
@@ -679,6 +747,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (pubkey (:pointer (:struct secp256k1-pubkey))))
 
 (defun ec-pubkey-negate (pubkey)
+  #-secp256k1 (declare (ignore pubkey))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (with-foreign-objects
       ((cpubkey '(:struct secp256k1-pubkey)))
     (bytes-to-foreign pubkey cpubkey 64)
@@ -764,18 +835,31 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   bytes)
 
 (defun make-key ()
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (%make-key :bytes (random-bytes 32)))
 
 (defun make-pubkey (key)
+  #-secp256k1 (declare (ignore key))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (%make-pubkey :bytes (ec-pubkey-create (key-bytes key))))
 
 (defun parse-pubkey (bytes)
+  #-secp256k1 (declare (ignore bytes))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (%make-pubkey :bytes (ec-pubkey-parse bytes)))
 
 (defun serialize-pubkey (key)
+  #-secp256k1 (declare (ignore key))
+  #-secp256k1 (error 'secp256k1-not-found-error)
   (ec-pubkey-serialize (key-bytes key)))
 
 (defun parse-signature (bytes &key (type :relaxed))
+  #-secp256k1 (declare (ignore key type))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let* ((bytes (ecase type
                   (:compact
                    (ecdsa-signature-parse-compact bytes))
@@ -786,6 +870,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
     (%make-signature :bytes bytes)))
 
 (defun serialize-signature (signature &key (type :der))
+  #-secp256k1 (declare (ignore signature type))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (ecase type
     (:compact
      (ecdsa-signature-serialize-compact (signature-bytes signature)))
@@ -793,9 +880,15 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
      (ecdsa-signature-serialize-der (signature-bytes signature)))))
 
 (defun make-signature (key hash)
+  #-secp256k1 (declare (ignore key hash))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (%make-signature :bytes (ecdsa-sign hash (key-bytes key))))
 
 (defun verify-signature (pubkey hash signature)
+  #-secp256k1 (declare (ignore pubkey hash signature))
+  #-secp256k1 (error 'secp256k1-not-found-error)
+  #+secp256k1
   (let* ((bytes  (signature-bytes signature))
          (nbytes (ecdsa-signature-normalize bytes)))
     (ecdsa-verify (or nbytes bytes) hash (pubkey-bytes pubkey))))
