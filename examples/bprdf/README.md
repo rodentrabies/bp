@@ -48,9 +48,9 @@ In order to start the loader, run
 You should see a loader log that looks similar to this: 
 
 ``` lisp
-[2021-09-21T20:44:40] Blocks: 0/701589, txs: 0/672153493, progress: 0.00000)
-[2021-09-21T20:44:50] Blocks: 1494/701589, txs: 1520/672153493, progress: 0.00000)
-[2021-09-21T20:45:00] Blocks: 3068/701589, txs: 3118/672153493, progress: 0.00000)
+[2021-09-21T20:44:40] Blocks: 0/701589, txs: 0/672153493, progress: 0.00000
+[2021-09-21T20:44:50] Blocks: 1494/701589, txs: 1520/672153493, progress: 0.00000
+[2021-09-21T20:45:00] Blocks: 3068/701589, txs: 3118/672153493, progress: 0.00000
 ...
 ```
 
@@ -63,12 +63,22 @@ In order to stop the loader, run
 Once the function call above returns, all the workers have been
 stopped and no data will be added to the repository.
 
-In order to continue the load, run 
+In order to continue the load, run the same form but make sure the
+value of `cleanp` argument is `nil`:
 
 ``` lisp
 (bp/examples/bprdf:start-load "http://user:password@127.0.0.1:8332"
-                              "http://user:password@127.0.0.1:10035/repositories/bprdf")
+                              "http://user:password@127.0.0.1:10035/repositories/bprdf"
+                              :workers 4)
 ```
 
-Note that the number of workers will be determined automatically to
-avoid alignment of worker block ranges.
+By default, the status of the load will be checked every 10
+seconds. As the load continues, it might make sense to change the
+status check period to a larger value (e.g. 1 hour) by evaluating
+
+``` lisp
+(setf bp/examples/bprdf:*status-check-period* 3600)
+```
+
+since it is expected to take anywhere from several days to several
+weeks on an average home machine.

@@ -37,7 +37,8 @@
   (:import-from :db.agraph.http.client
                 #:define-namespace)
   (:export #:start-load
-           #:stop-load))
+           #:stop-load
+           #:*status-check-period*))
 
 (in-package :bp/examples/bprdf)
 
@@ -45,19 +46,21 @@
   "A place to store loader processes to be able to conveniently stop
 them at once.")
 
+(defvar *status-check-period* 10)
+
 (defconstant +bprdf-vocabulary+ (merge-pathnames "bprdf.ttl" *load-truename*))
 
 (defconstant +bprdf-namespace+ "http://rodentrabies.btc/bprdf#")
 
 (define-condition stop-worker () ())
 
-(defun start-worker (src dst from-height to-height step)
+(defun start-worker (src dst block-queue)
   (handler-case
       (with-open-triple-store (db dst :if-does-not-exist :error)
         (unwind-protect
              (with-chain-supplier (bprpc:node-rpc-connection :url src)
                (with-buffered-triple-adds (db :limit 10000)
-                 (load-blocks from-height to-height step)))
+                 (load-blocks block-queue)))
           (rollback-triple-store :db db)))
     (stop-worker ())))
 
@@ -78,82 +81,74 @@ opened as REMOTE-TRIPLE-STORE."
                                      ,@args)
          ,@body))))
 
-(defun start-status-checker (src dst period)
+(defun start-planner (src dst block-queue from-height to-height workers)
   (with-open-triple-store (db dst :if-does-not-exist :error)
-    (let ((node-connection (make-instance 'bprpc:node-rpc-connection :url src)))
-      (handler-case
-          (loop
-            (let* ((timestamp (excl:universal-time-to-string (get-universal-time)))
-                   (chain-stats (bprpc:getchaintxstats node-connection))
-                   (chain-blocks (jsown:val chain-stats "window_final_block_height"))
-                   (chain-txs (jsown:val chain-stats "txcount"))
-                   (blocks (sparql:run-sparql "SELECT DISTINCT ?b { ?b a bp:Block }"
-                                              :results-format :count))
-                   (txs (sparql:run-sparql "SELECT DISTINCT ?b { ?b a bp:Tx }"
-                                           :results-format :count))
-                   (progress (/ txs chain-txs)))
-              (format t "[~a] Blocks: ~a/~a, txs: ~a/~a, progress: ~5$)~%"
-                      timestamp blocks chain-blocks txs chain-txs progress)
-              (sleep period)
-              (rollback-triple-store)))
-        (stop-worker ())))))
-
-(defun adjust-workers-and-height (workers height)
-  "Determine the best block heights for each worker out of total WORKERS to
-continue loading data with minimal overlap (duplication). Return a list of
-blocks heights ordered by worker index. If HEIGHT is non-NIL, use it as the
-start block, but still avoid duplication."
-  (let* ((query "SELECT DISTINCT ?h { ?b bp:blockHeight ?h } ORDER BY ?h")
-         (result-list (sparql:run-sparql query :results-format :lists))
-         (block-list (mapcar (lambda (r) (part->value (first r))) result-list))
-         (last-two-blocks (last block-list 2))
-         (worker-heights nil)
-         (guessed-workers
-           (and (first last-two-blocks) (second last-two-blocks)
-                (- (second last-two-blocks) (first last-two-blocks)))))
-    ;; It's very unlikely that the workers will be working at the same
-    ;; pace, so we will almost certainly have a single "leader"
-    ;; worker. This allows us to compute the original number of
-    ;; workers to and avoid deduplication.
-    (if (and guessed-workers (= guessed-workers 1))
-        (setf workers (or workers 1))
-        (setf workers (or guessed-workers workers 1)))
-    ;; Compute worker heights.
-    (loop :for (b0 b1) :on block-list :by #'cdr
-          :do (when (or (null b1) (/= (1+ b0) b1))
-                (let ((incomplete-block-list (member b0 block-list))
-                      (start-block (if (and height (> height b0)) height (+ b0 1))))
-                  (loop :for i :below workers
-                        :do (loop :for j :from (+ start-block i) :by workers
-                                  :do (when (not (member j incomplete-block-list))
-                                        (push j worker-heights)
-                                        (return))))
-                  (return))))
-    ;; If WORKER-HEIGHTS is NIL, choose consecutive blocks starting
-    ;; from HEIGHT.
-    (setf worker-heights
-          (if worker-heights
-              (sort worker-heights #'<)
-              (loop :for i :from (or height 0) :below (+ workers (or height 0))
-                    :collect i)))
-    ;; Return adjusted number of workers and their corresponding
-    ;; starting heights.
-    (values workers worker-heights)))
+    (let* ((loaded-blocks-query "SELECT DISTINCT ?h { ?b bp:blockHeight ?h } ORDER BY ?h")
+           (loaded-blocks (sparql:run-sparql loaded-blocks-query :output-format :lists))
+           (loaded-blocks-list (mapcar (lambda (r) (part->value (first r))) loaded-blocks))
+           (node-connection (make-instance 'bprpc:node-rpc-connection :url src))
+           (initial-chain-stats (bprpc:getchaintxstats node-connection))
+           (highest-known-block (jsown:val initial-chain-stats "window_final_block_height")))
+      (flet ((%within-range (i)
+               (and (or (not from-height) (>= i from-height))
+                    (or (not to-height) (<= i to-height)))))
+        ;; Populate the block queue with all blocks missing from the
+        ;; contiguous sequence of loaded blocks and add all the blocks
+        ;; from the last loaded one until the last known one.
+        (loop
+          :for (b0 b1) :on loaded-blocks-list :by #'cdr
+          :do (when (and b0 b1 (/= (1+ b0) b1))
+                (loop
+                  :for i :from (1+ b0) :to (1- b1)
+                  :if (%within-range i)
+                    :do (mp:enqueue block-queue i)))
+          :finally (let ((last-loaded-block (or b0 -1))) ;; -1 - no blocks at all
+                     (loop
+                       :for i :from (1+ last-loaded-block) :to highest-known-block
+                       :if (%within-range i)
+                         :do (mp:enqueue block-queue i))))
+        (format t "[~a] Initially enqueued blocks: ~a~%"
+                (excl:universal-time-to-string (get-universal-time))
+                (mp:queue-length block-queue))
+        ;; Start the status check loop.
+        (handler-case
+            (loop
+              (let* ((chain-stats (bprpc:getchaintxstats node-connection))
+                     (chain-blocks (jsown:val chain-stats "window_final_block_height"))
+                     (chain-txs (jsown:val chain-stats "txcount"))
+                     (blocks (sparql:run-sparql "SELECT DISTINCT ?b { ?b a bp:Block }"
+                                                :output-format :count))
+                     (txs (sparql:run-sparql "SELECT DISTINCT ?b { ?b a bp:Tx }"
+                                             :output-format :count))
+                     (progress (/ txs chain-txs)))
+                (when (> chain-blocks highest-known-block)
+                  (loop
+                    :for i :from (1+ highest-known-block) :to chain-blocks
+                    :if (%within-range i)
+                      :do (mp:enqueue block-queue i))
+                  (let ((new-blocks (- chain-blocks highest-known-block)))
+                    (format t "[~a] Adding ~a block~p to the queue~%"
+                            (excl:universal-time-to-string (get-universal-time))
+                            new-blocks
+                            new-blocks))
+                  (setf highest-known-block chain-blocks))
+                (when (not (%within-range highest-known-block))
+                  (loop :repeat workers :do (mp:enqueue block-queue nil)))
+                (format t "[~a] Blocks: ~a/~a, txs: ~a/~a, progress: ~5$~%"
+                        (excl:universal-time-to-string (get-universal-time))
+                        blocks chain-blocks txs chain-txs progress)
+                (sleep *status-check-period*)
+                (rollback-triple-store)))
+          (stop-worker ()))))))
 
 (defun start-load (src dst &key workers cleanp from-height to-height)
   ;; Perform clean setup if explicitly requested or repository does not exist.
   (setf cleanp (or cleanp (not (triple-store-exists-p dst))))
-  ;; Workers can only be specified when starting with an empty
-  ;; repository. If there already is data in the repo, the workers are
-  ;; computed to be the same as before to avoid having to delete
-  ;; duplicates on restart.
   (with-open-remote-triple-store (db dst :if-does-not-exist :create)
     ;; Set namespaces, both locally (in Lisp client) and persistently (on the server).
     (register-namespace "bp" +bprdf-namespace+)
     (define-namespace (@client db) "bp" +bprdf-namespace+ :type :repository)
-    ;; Compute starting blocks and start loading.
-    (multiple-value-bind (workers worker-heights)
-        (adjust-workers-and-height workers from-height)
+    (let ((block-queue (make-instance 'mp:queue :name "BPRDF block queue lock")))
       ;; Perform reinitialization if CLEANP.
       (when cleanp
         (delete-triples :db db)
@@ -161,19 +156,22 @@ start block, but still avoid duplication."
         (drop-index :gspoi)
         (load-turtle +bprdf-vocabulary+ :db db :commit t))
       ;; Print starting heights and number of workers.
-      (format t "[~a] Starting load with ~a worker~p from block~p ~{~a~^, ~}~%"
+      (format t "[~a] Starting load with ~a worker~p~%"
               (excl:universal-time-to-string (get-universal-time))
-              workers workers (length worker-heights) worker-heights)
-      ;; Start status checker thread.
+              workers
+              workers)
+      ;; Start planner/status thread.
       (push (mp:process-run-function
-             "BPRDF status checker" #'start-status-checker
-             src dst 10)
+             "BPRDF planner"
+             #'start-planner
+             src dst block-queue from-height to-height workers)
             *workers*)
       ;; Start workers.
       (dotimes (i workers)
         (push (mp:process-run-function
-               (format nil "BPRDF worker ~a" i) #'start-worker
-               src dst (nth i worker-heights) to-height workers)
+               (format nil "BPRDF worker ~a" i)
+               #'start-worker
+               src dst block-queue)
               *workers*)))))
 
 (defun stop-load ()
@@ -187,13 +185,12 @@ start block, but still avoid duplication."
 (defun unix-to-date-time (timestamp)
   (excl:universal-time-to-string (excl.osi:unix-to-universal-time timestamp) :format :iso8601))
 
-(defun load-blocks (from-height to-height step)
-  ;; Load blocks starting from `FROM-HEIGHT'.
+(defun load-blocks (block-queue)
   (macrolet ((%r (name) `(resource ,name "bp"))
              (%l (value datatype) `(literal (format nil "~a" ,value) :datatype ,datatype)))
     (loop
-      :for block-height :from from-height :by step
-      :while (or (not to-height) (and to-height (< block-height to-height)))
+      :for block-height := (mp:dequeue block-queue :wait t)
+      :while block-height
       :do
          (tagbody retry-block
             ;; Load block at a height `HEIGHT'.
@@ -300,10 +297,3 @@ start block, but still avoid duplication."
 #+test
 ;; In order to stop the load, do:
 (bp/examples/bprdf:stop-load)
-
-#+test
-;; In order to continue load from the point where it was stopped, do
-;; the following (notice that the workers and starting height will be
-;; computed from the data):
-(bp/examples/bprdf:start-load "http://user:password@127.0.0.1:8332"
-                              "http://user:password@127.0.0.1:10035/repositories/bprdf")
