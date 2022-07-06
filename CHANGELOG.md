@@ -1,6 +1,6 @@
 # `bp` API changes
 
-Here is a list of API changes for each version of AG to help users to
+Here is a list of API changes for each version of `bp` to help users to
 identify potential incompatibilities.
 
 Changes that are marked with **BREAKING** are breaking the
@@ -9,6 +9,13 @@ more exported symbols or changing the behaviour of one or more
 exported functions. Generally these will become very rare with
 versions 0.1 and onward, but until 0.1 are bound to happen to make API
 as consistent as possible.
+
+## BP 0.0.4
+
+- New representation format for `OP_PUSHDATA*` script commands now
+  includes a byte sequence representation of the length of the payload
+  to ensure `(serialize (parse ...))` produces the same byte sequence
+  even for scripts with unexpected ends.
 
 ## BP 0.0.3
 

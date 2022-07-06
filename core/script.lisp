@@ -21,10 +21,79 @@
 
 
 ;;;-----------------------------------------------------------------------------
-;;; Script parsing and serialization
+;;; Script representation
 
 (defstruct script
   commands)
+
+;;; Script's COMMANDS slot is an array of commands, each of which is either
+;;;
+;;;   - an integer for a simple command (like OP_0, OP_DUP etc),
+;;;
+;;;   - a cons (<op> . <payload>) for a push command (OP_PUSH{1,2,...,75}),
+;;;
+;;;   - a cons (<op> . (<payload-length> . <payload>)) for a pushdata
+;;;     command (OP_PUSHDATA{1,2,4}), where <payload-length> is a sequence
+;;;     of 1, 2 or 4 bytes representing the length of the payload.
+;;;
+;;; NOTE: these representation details are given for reference and should
+;;;       not be relied upon; the functions defined below (`make-command',
+;;;       `command-*') should be used instead.
+
+(defun make-command (op &key payload payload-length)
+  "Make a new command. Argument `payload` should only be provided for
+`OP_PUSH*` and `OP_PUSHDATA*` commands, argument `payload-length` - only
+for `OP_PUSHDATA*` commands."
+  (cond ((and payload payload-length)
+         (cons op (cons payload-length payload)))
+        (payload
+         (cons op payload))
+        (t
+         op)))
+
+(defun command-simple-p (command)
+  (atom command))
+
+(defun command-push-p (command)
+  (and (consp command) (atom (cdr command))))
+
+(defun command-pushdata-p (command)
+  (and (consp command) (consp (cdr command))))
+
+(defun command-unexpected-end-p (command)
+  (and (consp command) (eq (car command) :unexpected-end)))
+
+(defun command-opcode (command)
+  (if (command-simple-p command)
+      command
+      (car command)))
+
+(defun command-payload (command)
+  (cond ((command-push-p command)
+         (cdr command))
+        ((command-pushdata-p command)
+         (cdr (cdr command)))
+        (t
+         nil)))
+
+(defun command-payload-length (command)
+  (when (command-pushdata-p command)
+    (car (cdr command))))
+
+(defun command-number (command)
+  "If a given script command is a simple integer data push command,
+return the corresponding integer, otherwise return `nil`."
+  (let ((code (command-opcode command)))
+    (cond ((= code 0)
+           0)
+          ((<= 81 code 96)
+           (- code 80))
+          (t
+           nil))))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Opcode mappings
 
 (defvar *opcodes-by-code* (make-hash-table)
   "Table mapping opcodes to pairs (<list of opcode-names> . <function>).")
@@ -90,51 +159,26 @@ otherwise."
         bytes)
       #()))
 
-(defun command-op (command)
-  (if (consp command)
-      (car command)
-      command))
-
-(defun command-number (command)
-  (let ((code (command-op command)))
-    (cond ((= code 0)
-           0)
-          ((<= 81 code 96)
-           (- code 80))
-          (t
-           nil))))
-
-(defun command-payload (command)
-  (if (consp command)
-      (cdr command)
-      nil))
-
 (defmethod serialize ((script script) stream)
-  (let* ((commands (script-commands script))
-         (script-bytes
-          (ironclad:with-octet-output-stream (script-stream)
-            (loop
-               :for op :across commands
-               :if (and (consp op) (eq (car op) :unexpected_end))
-               :do
-                 (write-bytes (cdr op) script-stream (length (cdr op)))
-               :else
-               :if (and (consp op) (<= (opcode :op_push1) (car op) (opcode :op_push75)))
-               :do
-                 (write-byte (car op) script-stream)
-                 (write-bytes (cdr op) script-stream (length (cdr op)))
-               :else
-               :if (and (consp op) (<= (opcode :op_pushdata1) (car op) (opcode :op_pushdata4)))
-               :do
-                 (let ((int-size (cond ((= (car op) (opcode :op_pushdata1)) 1)
-                                       ((= (car op) (opcode :op_pushdata2)) 2)
-                                       ((= (car op) (opcode :op_pushdata4)) 4))))
-                   (write-byte (car op) script-stream)
-                   (write-int (length (cdr op)) script-stream :size int-size :byte-order :little)
-                   (write-bytes (cdr op) script-stream (length (cdr op))))
-               :else
-               :do
-                 (write-byte op script-stream))))
+  (let* ((script-bytes
+           (ironclad:with-octet-output-stream (script-stream)
+             (loop
+               :for command :across (script-commands script)
+               :for opcode := (command-opcode command)
+               :for payload := (command-payload command)
+               :do (cond
+                     ((and (command-push-p command)
+                           (<= (opcode :op_push1) opcode (opcode :op_push75)))
+                      (write-byte opcode script-stream)
+                      (write-bytes payload script-stream (length payload)))
+                     ((and (command-pushdata-p command)
+                           (<= (opcode :op_pushdata1) opcode (opcode :op_pushdata4)))
+                      (let ((payload-length (command-payload-length command)))
+                        (write-byte opcode script-stream)
+                        (write-bytes payload-length script-stream (length payload-length))
+                        (write-bytes payload script-stream (length payload))))
+                     (t
+                      (write-byte opcode script-stream))))))
          (script-length (length script-bytes)))
     (write-varint script-length stream)
     (write-bytes script-bytes stream script-length)))
@@ -145,42 +189,38 @@ otherwise."
          (commands (list)))
     (ironclad:with-octet-input-stream (script-stream script-bytes)
       (loop
-         :with i := 0 :while (< i script-len)
-         :for op := (read-byte script-stream)
-         :if (<= (opcode :op_push1) op (opcode :op_push75))
-         :do
-           (let* ((expected-read-size op)
-                  (unexpected-end-p (> (+ i 1 expected-read-size) script-len))
-                  (read-size (min expected-read-size (- script-len i 1))))
-             (if unexpected-end-p
-                 (ironclad:with-octet-input-stream (script-stream script-bytes i) ;; hacky way to seek
-                   (push (cons :unexpected_end (read-bytes script-stream (1+ read-size))) commands))
-                 (push (cons op (read-bytes script-stream read-size)) commands))
-             (incf i (+ 1 read-size)))
-         :else
-         :if (<= (opcode :op_pushdata1) op (opcode :op_pushdata4))
-         :do
-           (let* ((expected-int-size (cond ((= op (opcode :op_pushdata1)) 1)
-                                           ((= op (opcode :op_pushdata2)) 2)
-                                           ((= op (opcode :op_pushdata4)) 4)))
-                  (unexpected-end-p (> (+ i 1 expected-int-size) script-len))
-                  (int-size (min expected-int-size (- script-len i 1))))
-             (if unexpected-end-p
-                 (ironclad:with-octet-input-stream (script-stream script-bytes i) ;; hacky way to seek
-                   (push (cons :unexpected_end (read-bytes script-stream (1+ int-size))) commands))
-                 (let* ((expected-read-size (read-int script-stream :size int-size :byte-order :little))
-                        (unexpected-end-p (> (+ i 1 int-size expected-read-size) script-len))
-                        (read-size (min expected-read-size (- script-len i 1 int-size))))
-                   (if unexpected-end-p
-                       (ironclad:with-octet-input-stream (script-stream script-bytes i) ;; hacky way to seek
-                         (push (cons :unexpected_end (read-bytes script-stream (+ 1 int-size read-size))) commands))
-                       (push (cons op (read-bytes script-stream read-size)) commands))
-                   (incf i read-size)))
-             (incf i (+ 1 int-size)))
-         :else
-         :do
-           (push op commands)
-           (incf i)))
+        :with i := 0 :while (< i script-len)
+        :for opcode := (read-byte script-stream)
+        :do (cond
+              ((<= (opcode :op_push1) opcode (opcode :op_push75))
+               (let* ((expected-payload-size opcode)
+                      (payload-size (min expected-payload-size (- script-len i 1)))
+                      (payload (read-bytes script-stream payload-size)))
+                 (push (make-command opcode :payload payload) commands)
+                 (incf i (+ 1 payload-size))))
+              ((<= (opcode :op_pushdata1) opcode (opcode :op_pushdata4))
+               (let* ((expected-length-size (cond ((= opcode (opcode :op_pushdata1)) 1)
+                                               ((= opcode (opcode :op_pushdata2)) 2)
+                                               ((= opcode (opcode :op_pushdata4)) 4)))
+                      (unexpected-end-p (> (+ i 1 expected-length-size) script-len))
+                      (payload-length-size (min expected-length-size (- script-len i 1))))
+                 (if unexpected-end-p
+                     (let ((length (read-bytes script-stream payload-length-size)))
+                       (push (make-command opcode :payload #() :payload-length length) commands))
+                     (let* ((expected-payload-size
+                              (read-int script-stream :size payload-length-size :byte-order :little))
+                            (payload-size
+                              (min expected-payload-size (- script-len i 1 payload-length-size)))
+                            (payload (read-bytes script-stream payload-size))
+                            (length
+                              (ironclad:integer-to-octets
+                               payload-size :n-bits (* 8 payload-length-size) :bing-endian nil)))
+                       (push (make-command opcode :payload payload :payload-length length) commands)
+                       (incf i payload-size)))
+                 (incf i (+ 1 payload-length-size))))
+              (t
+               (push opcode commands)
+               (incf i)))))
     (make-script :commands (coerce (reverse commands) 'vector))))
 
 (defvar *print-script-as-assembly* nil
@@ -188,15 +228,15 @@ otherwise."
 
 (defmethod print-object ((script script) stream)
   (flet ((print-command  (c)
-           (cond ((and (consp c) (eq (car c) :unexpected_end))
-                  (format nil "UNEXPECTED_END ~a" (hex-encode (cdr c))))
-                 ((consp c)
-                  (if *print-script-as-assembly*
-                      (format nil "~a" (hex-encode (cdr c)))
-                      (format nil "~{~:@(~a~)~^/~} ~a"
-                              (opcode (car c)) (hex-encode (cdr c)))))
-                 (t
-                  (format nil "~{~:@(~a~)~^/~}" (opcode c))))))
+           (let ((opcode (command-opcode c))
+                 (payload (command-payload c)))
+             (if (command-simple-p c)
+                 (format nil "~{~:@(~a~)~^/~}" (opcode opcode))
+                 (if *print-script-as-assembly*
+                     (format nil "~a" (hex-encode payload))
+                     (format nil "~{~:@(~a~)~^/~} ~a"
+                             (opcode opcode)
+                             (hex-encode payload)))))))
     (let ((commands (map 'list #'print-command (script-commands script))))
       (if *print-script-as-assembly*
           (format stream "~{~a~^ ~}" commands)
@@ -259,7 +299,7 @@ pattern:
   (let ((commands (script-commands script-pubkey)))
     (and (= (length commands) 2)
          (command-payload (aref commands 0))
-         (= (command-op (aref commands 1)) (opcode :op_checksig)))))
+         (= (command-opcode (aref commands 1)) (opcode :op_checksig)))))
 
 (defun p2ms-p (script-pubkey)
   "Check if given SCRIPT-PUBKEY indicates a standard obsolete p2ms
@@ -275,14 +315,14 @@ pattern:
     (and (>= length 3)
          (command-number (aref commands 0))
          (command-number (aref commands (- length 2)))
-         (= (command-op (aref commands (- length 1))) (opcode :op_checkmultisig))
+         (= (command-opcode (aref commands (- length 1))) (opcode :op_checkmultisig))
          (every #'command-payload (subseq commands 1 (- length 2))))))
 
 (defun null-data-p (script-pubkey)
   "Check if given SCRIPT-PUBKEY is a NULL DATA script."
   (let ((commands (script-commands script-pubkey)))
     (and (= (length commands) 2)
-         (= (command-op (aref commands 0)) (opcode :op_return))
+         (= (command-opcode (aref commands 0)) (opcode :op_return))
          (command-payload (aref commands 1)))))
 
 (defun p2pkh-p (script-pubkey)
@@ -294,11 +334,11 @@ pattern:
     OP_CHECKSIG"
   (let ((commands (script-commands script-pubkey)))
     (and (= (length commands) 5)
-         (= (command-op (aref commands 0)) (opcode :op_dup))
-         (= (command-op (aref commands 1)) (opcode :op_hash160))
+         (= (command-opcode (aref commands 0)) (opcode :op_dup))
+         (= (command-opcode (aref commands 1)) (opcode :op_hash160))
          (command-payload (aref commands 2)) ;; NIL if not a push op
-         (= (command-op (aref commands 3)) (opcode :op_equalverify))
-         (= (command-op (aref commands 4)) (opcode :op_checksig)))))
+         (= (command-opcode (aref commands 3)) (opcode :op_equalverify))
+         (= (command-opcode (aref commands 4)) (opcode :op_checksig)))))
 
 (defun p2sh-p (script-pubkey)
   "Check if current SCRIPT-PUBKEY indicates the BIP 0016 (p2sh)
@@ -310,9 +350,9 @@ pattern:
   ;; TODO: this must also check block timestamp > 1333238400
   (let ((commands (script-commands script-pubkey)))
     (and (= (length commands) 3)
-         (= (command-op (aref commands 0)) (opcode :op_hash160))
-         (= (command-op (aref commands 1)) (opcode :op_push20))
-         (= (command-op (aref commands 2)) (opcode :op_equal)))))
+         (= (command-opcode (aref commands 0)) (opcode :op_hash160))
+         (= (command-opcode (aref commands 1)) (opcode :op_push20))
+         (= (command-opcode (aref commands 2)) (opcode :op_equal)))))
 
 (defun segwit-p (script-pubkey)
   "Check if given SCRIPT-PUBKEY indicates the BIP 0141 (Segregated
@@ -321,7 +361,7 @@ Witness) structure:
     <witness-program> (2-40 bytes)"
   (let ((commands (script-commands script-pubkey)))
     (when (= (length commands) 2)
-      (let ((version (command-op (aref commands 0)))
+      (let ((version (command-opcode (aref commands 0)))
             (program (command-payload (aref commands 1))))
         (and
          ;; Version byte must be in {OP_0, OP_1, ..., OP_16}.
@@ -443,7 +483,7 @@ value will write the trace to that stream).")
 
 (defun print-script-execution-state (current-command state)
   (flet ((command-op-name (command)
-           (string-upcase (first (opcode (command-op command)))))
+           (string-upcase (first (opcode (command-opcode command)))))
          (hex-sequence (bytes)
            (map 'vector (lambda (b) (format nil "~x" b)) bytes)))
     (format
@@ -474,7 +514,7 @@ value will write the trace to that stream).")
     (loop
        :for command := (pop (@commands state))
        :while command
-       :for op := (command-op command)
+       :for op := (command-opcode command)
        :for payload := (command-payload command)
        :for op-function := (nth-value 1 (opcode op))
        ;; Check if current branch is executable.
@@ -570,7 +610,7 @@ value will write the trace to that stream).")
 constant :BASE, and for SegWit ones - :WITNESS-V<N>, where N is the
 first op of the witness script pubkey."
   (if (segwit-p script)
-      (ecase (command-op (aref (script-commands script) 0))
+      (ecase (command-opcode (aref (script-commands script) 0))
         (0 :witness-v0))
       :base))
 
