@@ -2,4 +2,5 @@
   (:use
    :bp/tests/encoding
    :bp/tests/block
-   :bp/tests/transaction))
+   :bp/tests/transaction
+   :bp/tests/script))
