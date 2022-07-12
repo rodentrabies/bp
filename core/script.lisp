@@ -214,7 +214,7 @@ otherwise."
                             (payload (read-bytes script-stream payload-size))
                             (length
                               (ironclad:integer-to-octets
-                               payload-size :n-bits (* 8 payload-length-size) :bing-endian nil)))
+                               payload-size :n-bits (* 8 payload-length-size) :big-endian nil)))
                        (push (make-command opcode :payload payload :payload-length length) commands)
                        (incf i payload-size)))
                  (incf i (+ 1 payload-length-size))))
