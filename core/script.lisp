@@ -397,17 +397,20 @@ format is defined for that type of script, return a Bitcoin address for a given
 script as a second value."
   (let ((commands (script-commands script-pubkey)))
     (cond
-      ((or (p2wpkh-p script-pubkey)
-           (p2wsh-p script-pubkey))
+      ((segwit-p script-pubkey)
        (if *bip-0141-active-p*
-           (let* ((hrp (ecase network
+           (let* ((type (cond ((p2wpkh-p script-pubkey)
+                               :p2wpkh)
+                              ((p2wsh-p script-pubkey)
+                               :p2wsh)))
+                  (hrp (ecase network
                          (:mainnet "bc")
                          (:testnet "tb")))
                   (witness-version (command-number (aref commands 0)))
                   (payload (command-payload (aref commands 1)))
                   (full-payload (concatenate 'vector (vector witness-version) payload))
                   (address (bech32-encode hrp full-payload :versionp t)))
-             (values t address))
+             (values type address))
            (values nil nil)))
       ((p2sh-p script-pubkey)
        (if *bip-0016-active-p*
