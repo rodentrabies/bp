@@ -373,21 +373,31 @@ Witness) structure:
 (defun p2wpkh-p (script-pubkey)
   "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Public Key Hash
 script structure:
-    <version-byte>
+    OP_0
     <20-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (=  0 (aref (script-commands script-pubkey) 0))
+   (eq 0 (command-number (aref (script-commands script-pubkey) 0)))
    (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2wsh-p (script-pubkey)
   "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Script Hash
 script structure:
-    <version-byte>
+    OP_0
     <32-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (=  0 (aref (script-commands script-pubkey) 0))
+   (eq 0 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
+
+(defun p2tr-p (script-pubkey)
+  "Check if given SCRIPT-PUBKEY indicates a Pat to Taproot script
+sturcture:
+   OP_1
+   <32-byte witness-program>"
+  (and
+   (segwit-p script-pubkey)
+   (eq 1 (command-number (aref (script-commands script-pubkey) 0)))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun script-standard-p (script-pubkey &key network)
@@ -402,14 +412,18 @@ script as a second value."
            (let* ((type (cond ((p2wpkh-p script-pubkey)
                                :p2wpkh)
                               ((p2wsh-p script-pubkey)
-                               :p2wsh)))
+                               :p2wsh)
+                              ((and *bip-0341-active-p* (p2tr-p script-pubkey))
+                               :p2tr)))
                   (hrp (ecase network
                          (:mainnet "bc")
                          (:testnet "tb")))
                   (witness-version (command-number (aref commands 0)))
                   (payload (command-payload (aref commands 1)))
                   (full-payload (concatenate 'vector (vector witness-version) payload))
-                  (address (bech32-encode hrp full-payload :versionp t)))
+                  (address (bech32-encode hrp full-payload
+                                          :versionp t
+                                          :bech32m-p (eq type :p2tr))))
              (values type address))
            (values nil nil)))
       ((p2sh-p script-pubkey)
@@ -613,8 +627,8 @@ value will write the trace to that stream).")
 constant :BASE, and for SegWit ones - :WITNESS-V<N>, where N is the
 first op of the witness script pubkey."
   (if (segwit-p script)
-      (ecase (command-opcode (aref (script-commands script) 0))
-        (0 :witness-v0))
+      (let ((segwit-version (command-number (aref (script-commands script) 0))))
+        (intern (format nil "~a~a" (symbol-name :witness-v) segwit-version) :keyword))
       :base))
 
 (defun execute-scripts (script-sig script-pubkey &key state)

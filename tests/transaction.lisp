@@ -60,7 +60,9 @@ transaction types."
                      *p2sh-p2wpkh-tx*
                      *p2sh-p2wsh-tx*
                      *p2wpkh-tx*
-                     *p2wsh-tx*)))
+                     *p2wsh-tx*
+                     *p2tr-tx*
+                     *null-data-tx*)))
       (loop
          :for txid :in txs
          :do (is (validp (get-transaction txid)))))))

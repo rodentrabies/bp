@@ -8,6 +8,7 @@
    ;; Variables:
    #:*bip-0016-active-p*
    #:*bip-0141-active-p*
+   #:*bip-0341-active-p*
    ;; BP-specific parameters:
    #:*bp-version*))
 
@@ -45,6 +46,10 @@ https://github.com/bitcoin/bips/blob/master/bip-0016.mediawiki.")
 (defparameter *bip-0141-active-p* t
   "Segregated Witness (Consensus layer)
 https://github.com/bitcoin/bips/blob/master/bip-0141.mediawiki.")
+
+(defparameter *bip-0341-active-p* t
+  "Taproot: SegWit version 1 spending rules
+https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki.")
 
 
 
