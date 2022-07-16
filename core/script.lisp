@@ -49,7 +49,7 @@
 `OP_PUSH*` and `OP_PUSHDATA*` commands, argument `payload-length` - only
 for `OP_PUSHDATA*` commands."
   (cond ((and payload payload-length)
-         (cons op (cons payload-length payload)))
+         (list* op payload-length payload))
         (payload
          (cons op payload))
         (t
@@ -82,7 +82,7 @@ for `OP_PUSHDATA*` commands."
 
 (defun command-payload-length (command)
   (when (command-pushdata-p command)
-    (car (cdr command))))
+    (second command)))
 
 (defun command-number (command)
   "If a given script command is a simple integer data push command,
@@ -153,13 +153,14 @@ otherwise."
            :for i :below num-bytes
            :for byte :from 0 :by 8
            :do (vector-push (ldb (byte 8 byte) ainteger) bytes)
-           :finally (if (zerop (logand (aref bytes (1- i)) #x80))
-                        (when negative-p
-                          (setf (aref bytes (1- i))
-                                (logior (aref bytes (1- i)) #x80)))
-                        (if negative-p
-                            (vector-push #x80 bytes)
-                            (vector-push #x00 bytes))))
+           :finally (cond ((zerop (logand (aref bytes (1- i)) #x80))
+                           (when negative-p
+                             (setf (aref bytes (1- i))
+                                   (logior (aref bytes (1- i)) #x80))))
+                          (negative-p
+                           (vector-push #x80 bytes))
+                          (t
+                           (vector-push #x00 bytes))))
         bytes)
       #()))
 
@@ -201,7 +202,7 @@ otherwise."
                       (payload-size (min expected-payload-size (- script-len i 1)))
                       (payload (read-bytes script-stream payload-size)))
                  (push (make-command opcode :payload payload) commands)
-                 (incf i (+ 1 payload-size))))
+                 (incf i (1+ payload-size))))
               ((<= (opcode :op_pushdata1) opcode (opcode :op_pushdata4))
                (let* ((expected-length-size (cond ((= opcode (opcode :op_pushdata1)) 1)
                                                ((= opcode (opcode :op_pushdata2)) 2)
@@ -221,7 +222,7 @@ otherwise."
                                payload-size :n-bits (* 8 payload-length-size) :big-endian nil)))
                        (push (make-command opcode :payload payload :payload-length length) commands)
                        (incf i payload-size)))
-                 (incf i (+ 1 payload-length-size))))
+                 (incf i (1+ payload-length-size))))
               (t
                (push opcode commands)
                (incf i)))))
@@ -234,13 +235,14 @@ otherwise."
   (flet ((print-command  (c)
            (let ((opcode (command-opcode c))
                  (payload (command-payload c)))
-             (if (command-simple-p c)
-                 (format nil "~{~:@(~a~)~^/~}" (opcode opcode))
-                 (if *print-script-as-assembly*
-                     (format nil "~a" (hex-encode payload))
-                     (format nil "~{~:@(~a~)~^/~} ~a"
-                             (opcode opcode)
-                             (hex-encode payload)))))))
+             (cond ((command-simple-p c)
+                    (format nil "~{~:@(~a~)~^/~}" (opcode opcode)))
+                   (*print-script-as-assembly*
+                    (format nil "~a" (hex-encode payload)))
+                   (t
+                    (format nil "~{~:@(~a~)~^/~} ~a"
+                            (opcode opcode)
+                            (hex-encode payload)))))))
     (let ((commands (map 'list #'print-command (script-commands script))))
       (if *print-script-as-assembly*
           (format stream "~{~a~^ ~}" commands)
@@ -319,7 +321,7 @@ pattern:
     (and (>= length 3)
          (command-number (aref commands 0))
          (command-number (aref commands (- length 2)))
-         (= (command-opcode (aref commands (- length 1))) (opcode :op_checkmultisig))
+         (= (command-opcode (aref commands (1- length))) (opcode :op_checkmultisig))
          (every #'command-payload (subseq commands 1 (- length 2))))))
 
 (defun null-data-p (script-pubkey)
@@ -382,7 +384,7 @@ script structure:
     <20-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (eq 0 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 0 (command-number (aref (script-commands script-pubkey) 0)))
    (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2wsh-p (script-pubkey)
@@ -392,7 +394,7 @@ script structure:
     <32-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (eq 0 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 0 (command-number (aref (script-commands script-pubkey) 0)))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2tr-p (script-pubkey)
@@ -403,7 +405,7 @@ structure:
   (and
    *bip-0341-active-p*
    (segwit-p script-pubkey)
-   (eq 1 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 1 (command-number (aref (script-commands script-pubkey) 0)))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun script-standard-p (script-pubkey &key network)
@@ -606,7 +608,7 @@ value will write the trace to that stream).")
     (execute-script (apply #'script witness-stack) :state state)
     ;; Verify that SHA256(<witness-script>) is equal to
     ;; <witness-program>, decode and execute witness script.
-    (let* ((witness-script-data (aref witness (- witness-length 1)))
+    (let* ((witness-script-data (aref witness (1- witness-length)))
            (witness-script-length (length witness-script-data))
            (witness-script-bytes
             (with-output-to-byte-array (stream)
@@ -614,7 +616,7 @@ value will write the trace to that stream).")
               (write-bytes witness-script-data stream witness-script-length)))
            (witness-program
             (command-payload (aref (script-commands script-pubkey) 1))))
-      (when (not (equalp (sha256 witness-script-data) witness-program))
+      (unless (equalp (sha256 witness-script-data) witness-program)
         (error "P2WSH error: hash mismatch."))
       (with-input-from-byte-array (stream witness-script-bytes)
         (execute-script (parse 'script stream) :state state)))))
@@ -825,7 +827,7 @@ alt stack."
 (define-opcode op_ifdup 115 #x73 (state)
   "If the top stack value is not 0, duplicate it."
   (when (>= (length (@stack state)) 1)
-    (when (not (zerop (decode-integer (first (@stack state)))))
+    (unless (zerop (decode-integer (first (@stack state))))
       (push (first (@stack state)) (@stack state)))
     t))
 
@@ -897,8 +899,7 @@ alt stack."
   "The item at the top of the stack is copied and inserted before the
 second-to-top item."
   (when (>= (length (@stack state)) 2)
-    (setf (cddr (@stack state))
-          (cons (first (@stack state)) (cddr (@stack state))))
+    (push (first (@stack state)) (cddr (@stack state)))
     t))
 
 (define-opcode op_2drop 109 #x6d (state)

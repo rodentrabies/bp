@@ -202,7 +202,7 @@
 (defctype secp256k1-nonce-function :pointer)
 
 ;; All flags' lower 8 bits indicate what they're for. Do not use directly.
-(defconstant +secp256k1-flags-type-mask+        (- (ash 1 8) 1))
+(defconstant +secp256k1-flags-type-mask+        (1- (ash 1 8)))
 (defconstant +secp256k1-flags-type-context+     (ash 1 0))
 (defconstant +secp256k1-flags-type-compression+ (ash 1 1))
 
@@ -636,40 +636,40 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
                     (when (= pos inputlen) (%fail))
                     (setf lenbyte (aref input pos))
                     (incf pos)
-                    (if (not (= 0 (logand lenbyte #x80)))
-                        (progn
-                          (decf lenbyte #x80)
-                          (when (> lenbyte (- inputlen pos)) (%fail))
-                          (loop
+                    (cond ((not (= 0 (logand lenbyte #x80)))
+                           (decf lenbyte #x80)
+                           (when (> lenbyte (- inputlen pos)) (%fail))
+                           (loop
                              :while (and (> lenbyte 0) (= 0 (aref input pos)))
                              :do
-                               (incf pos)
-                               (decf lenbyte))
-                          (when (>= lenbyte 4) (%fail))
-                          (setf ,clen 0)
-                          (loop
+                                (incf pos)
+                                (decf lenbyte))
+                           (when (>= lenbyte 4) (%fail))
+                           (setf ,clen 0)
+                           (loop
                              :while (> lenbyte 0)
                              :do
-                               (setf ,clen (+ (ash ,clen 8) (aref input pos)))
-                               (incf pos)
-                               (decf lenbyte)))
-                        (setf ,clen lenbyte))
+                                (setf ,clen (+ (ash ,clen 8) (aref input pos)))
+                                (incf pos)
+                                (decf lenbyte)))
+                          (t
+                           (setf ,clen lenbyte)))
                     (when (> ,clen (- inputlen pos)) (%fail))
                     (setf ,cpos pos)))
                (%skip-zeroes (cpos clen)
                  `(loop
-                     :while (and (> ,clen 0) (= 0 (aref input ,cpos)))
-                     :do
+                    :while (and (> ,clen 0) (= 0 (aref input ,cpos)))
+                    :do
                        (decf ,clen)
                        (incf ,cpos)))
                (%copy (cpos clen offset)
                  `(if (> ,clen 32)
                       (setf overflow t)
                       (loop
-                         :for i :below ,clen
-                         :do (setf
-                              (aref tmpsig (+ (- ,offset ,clen) i))
-                              (aref input (+ ,cpos i)))))))
+                        :for i :below ,clen
+                        :do (setf
+                             (aref tmpsig (+ (- ,offset ,clen) i))
+                             (aref input (+ ,cpos i)))))))
       ;; Sequence tag byte.
       (setf pos 0)
       (when (or (= pos inputlen) (/= (aref input pos) #x30))
@@ -679,7 +679,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
       (when (= pos inputlen) (%fail))
       (setf lenbyte (aref input pos))
       (incf pos)
-      (when (not (= 0 (logand lenbyte #x80)))
+      (unless (= 0 (logand lenbyte #x80))
         (decf lenbyte #x80)
         (when (> lenbyte (- inputlen pos)) (%fail))
         (incf pos lenbyte))
@@ -701,7 +701,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
       ;; Copy S value.
       (%copy spos slen 64)
       ;; Parse fixed signature.
-      (when (not overflow)
+      (unless overflow
         (setf overflow (not (setf sig (ecdsa-signature-parse-compact tmpsig)))))
       (when overflow
         ;; Overwrite the result again with a correctly-parsed but
@@ -1824,13 +1824,13 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ec-pubkey-serialize (pubkey-bytes pubkey) :compressed compressed))
 
 (defun parse-signature (bytes &key (type :relaxed))
-  (let* ((bytes (ecase type
-                  (:compact
-                   (ecdsa-signature-parse-compact bytes))
-                  (:der
-                   (ecdsa-signature-parse-der bytes))
-                  (:relaxed
-                   (ecdsa-signature-parse-der-lax bytes)))))
+  (let ((bytes (ecase type
+                 (:compact
+                  (ecdsa-signature-parse-compact bytes))
+                 (:der
+                  (ecdsa-signature-parse-der bytes))
+                 (:relaxed
+                  (ecdsa-signature-parse-der-lax bytes)))))
     (%make-signature :bytes bytes)))
 
 (defun serialize-signature (signature &key (type :der))
