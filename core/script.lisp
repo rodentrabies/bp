@@ -377,7 +377,7 @@ script structure:
     <20-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (eq 0 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 0 (command-number (aref (script-commands script-pubkey) 0)))
    (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2wsh-p (script-pubkey)
@@ -387,7 +387,7 @@ script structure:
     <32-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (eq 0 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 0 (command-number (aref (script-commands script-pubkey) 0)))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2tr-p (script-pubkey)
@@ -397,7 +397,7 @@ sturcture:
    <32-byte witness-program>"
   (and
    (segwit-p script-pubkey)
-   (eq 1 (command-number (aref (script-commands script-pubkey) 0)))
+   (= 1 (command-number (aref (script-commands script-pubkey) 0)))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun script-standard-p (script-pubkey &key network)
