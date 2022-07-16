@@ -776,13 +776,13 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ec-pubkey-serialize (key-bytes key)))
 
 (defun parse-signature (bytes &key (type :relaxed))
-  (let* ((bytes (ecase type
-                  (:compact
-                   (ecdsa-signature-parse-compact bytes))
-                  (:der
-                   (ecdsa-signature-parse-der bytes))
-                  (:relaxed
-                   (ecdsa-signature-parse-der-lax bytes)))))
+  (let ((bytes (ecase type
+                 (:compact
+                  (ecdsa-signature-parse-compact bytes))
+                 (:der
+                  (ecdsa-signature-parse-der bytes))
+                 (:relaxed
+                  (ecdsa-signature-parse-der-lax bytes)))))
     (%make-signature :bytes bytes)))
 
 (defun serialize-signature (signature &key (type :der))
