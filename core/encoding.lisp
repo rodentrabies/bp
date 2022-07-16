@@ -378,7 +378,7 @@ in `util/strencoding.h`."
               (decf bits to-bits)
               (funcall output-fn (logand (ash acc (- bits)) maxv))))
     (if padp
-        (when (not (zerop bits))
+        (unless (zerop bits)
           (funcall output-fn (logand (ash acc (- to-bits bits)) maxv)))
         (when (or (>= bits from-bits)
                   (not (zerop (logand (ash acc (- to-bits bits)) maxv))))
@@ -411,11 +411,11 @@ in `util/strencoding.h`."
                (setf upper t)))
     :finally (and lower upper (error 'bech32-mixed-case-characters-error)))
   (let ((pos (position #\1 string :test #'char= :from-end t)))
-    (when (not pos)
+    (unless pos
       (error 'bech32-no-separator-character-error))
     (when (zerop pos)
       (error 'bech32-no-hrp-error))
-    (when (not (< pos (- (length string) 6)))
+    (unless (< pos (- (length string) 6))
       (error 'bech32-no-checksum-error))
     (let* ((values-length (- (length string) pos 1))
            (values (make-byte-array values-length))

@@ -617,7 +617,7 @@ value will write the trace to that stream).")
               (write-bytes witness-script-data stream witness-script-length)))
            (witness-program
             (command-payload (aref (script-commands script-pubkey) 1))))
-      (when (not (equalp (sha256 witness-script-data) witness-program))
+      (unless (equalp (sha256 witness-script-data) witness-program)
         (error "P2WSH error: hash mismatch."))
       (ironclad:with-octet-input-stream (stream witness-script-bytes)
         (execute-script (parse 'script stream) :state state)))))
@@ -832,7 +832,7 @@ alt stack."
 (define-opcode op_ifdup 115 #x73 (state)
   "If the top stack value is not 0, duplicate it."
   (when (>= (length (@stack state)) 1)
-    (when (not (zerop (decode-integer (first (@stack state)))))
+    (unless (zerop (decode-integer (first (@stack state))))
       (push (first (@stack state)) (@stack state)))
     t))
 

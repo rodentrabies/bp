@@ -412,7 +412,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
       (when (= pos inputlen) (%fail))
       (setf lenbyte (aref input pos))
       (incf pos)
-      (when (not (= 0 (logand lenbyte #x80)))
+      (unless (= 0 (logand lenbyte #x80))
         (decf lenbyte #x80)
         (when (> lenbyte (- inputlen pos)) (%fail))
         (incf pos lenbyte))
@@ -434,7 +434,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
       ;; Copy S value.
       (%copy spos slen 64)
       ;; Parse fixed signature.
-      (when (not overflow)
+      (unless overflow
         (setf overflow (not (setf sig (ecdsa-signature-parse-compact tmpsig)))))
       (when overflow
         ;; Overwrite the result again with a correctly-parsed but
