@@ -78,7 +78,7 @@ for `OP_PUSHDATA*` commands."
 
 (defun command-payload-length (command)
   (when (command-pushdata-p command)
-    (car (cdr command))))
+    (second command)))
 
 (defun command-number (command)
   "If a given script command is a simple integer data push command,
