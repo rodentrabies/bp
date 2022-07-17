@@ -113,7 +113,7 @@
   (data :unsigned-char :count 64))
 
 ;; All flags' lower 8 bits indicate what they're for. Do not use directly.
-(defconstant +secp256k1-flags-type-mask+        (- (ash 1 8) 1))
+(defconstant +secp256k1-flags-type-mask+        (1- (ash 1 8)))
 (defconstant +secp256k1-flags-type-context+     (ash 1 0))
 (defconstant +secp256k1-flags-type-compression+ (ash 1 1))
 ;; The higher bits contain the actual data. Do not use directly.

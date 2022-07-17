@@ -197,7 +197,7 @@ otherwise."
                       (payload-size (min expected-payload-size (- script-len i 1)))
                       (payload (read-bytes script-stream payload-size)))
                  (push (make-command opcode :payload payload) commands)
-                 (incf i (+ 1 payload-size))))
+                 (incf i (1+ payload-size))))
               ((<= (opcode :op_pushdata1) opcode (opcode :op_pushdata4))
                (let* ((expected-length-size (cond ((= opcode (opcode :op_pushdata1)) 1)
                                                ((= opcode (opcode :op_pushdata2)) 2)
@@ -217,7 +217,7 @@ otherwise."
                                payload-size :n-bits (* 8 payload-length-size) :big-endian nil)))
                        (push (make-command opcode :payload payload :payload-length length) commands)
                        (incf i payload-size)))
-                 (incf i (+ 1 payload-length-size))))
+                 (incf i (1+ payload-length-size))))
               (t
                (push opcode commands)
                (incf i)))))
@@ -315,7 +315,7 @@ pattern:
     (and (>= length 3)
          (command-number (aref commands 0))
          (command-number (aref commands (- length 2)))
-         (= (command-opcode (aref commands (- length 1))) (opcode :op_checkmultisig))
+         (= (command-opcode (aref commands (1- length))) (opcode :op_checkmultisig))
          (every #'command-payload (subseq commands 1 (- length 2))))))
 
 (defun null-data-p (script-pubkey)
@@ -609,7 +609,7 @@ value will write the trace to that stream).")
     (execute-script (apply #'script witness-stack) :state state)
     ;; Verify that SHA256(<witness-script>) is equal to
     ;; <witness-program>, decode and execute witness script.
-    (let* ((witness-script-data (aref witness (- witness-length 1)))
+    (let* ((witness-script-data (aref witness (1- witness-length)))
            (witness-script-length (length witness-script-data))
            (witness-script-bytes
             (ironclad:with-octet-output-stream (stream)
