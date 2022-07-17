@@ -149,13 +149,14 @@ otherwise."
            :for i :below num-bytes
            :for byte :from 0 :by 8
            :do (vector-push (ldb (byte 8 byte) ainteger) bytes)
-           :finally (if (zerop (logand (aref bytes (1- i)) #x80))
-                        (when negative-p
-                          (setf (aref bytes (1- i))
-                                (logior (aref bytes (1- i)) #x80)))
-                        (if negative-p
-                            (vector-push #x80 bytes)
-                            (vector-push #x00 bytes))))
+           :finally (cond ((zerop (logand (aref bytes (1- i)) #x80))
+                           (when negative-p
+                             (setf (aref bytes (1- i))
+                                   (logior (aref bytes (1- i)) #x80))))
+                          (negative-p
+                           (vector-push #x80 bytes))
+                          (t
+                           (vector-push #x00 bytes))))
         bytes)
       #()))
 
@@ -230,13 +231,14 @@ otherwise."
   (flet ((print-command  (c)
            (let ((opcode (command-opcode c))
                  (payload (command-payload c)))
-             (if (command-simple-p c)
-                 (format nil "~{~:@(~a~)~^/~}" (opcode opcode))
-                 (if *print-script-as-assembly*
-                     (format nil "~a" (hex-encode payload))
-                     (format nil "~{~:@(~a~)~^/~} ~a"
-                             (opcode opcode)
-                             (hex-encode payload)))))))
+             (cond ((command-simple-p c)
+                    (format nil "~{~:@(~a~)~^/~}" (opcode opcode)))
+                   (*print-script-as-assembly*
+                    (format nil "~a" (hex-encode payload)))
+                   (t
+                    (format nil "~{~:@(~a~)~^/~} ~a"
+                            (opcode opcode)
+                            (hex-encode payload)))))))
     (let ((commands (map 'list #'print-command (script-commands script))))
       (if *print-script-as-assembly*
           (format stream "~{~a~^ ~}" commands)
