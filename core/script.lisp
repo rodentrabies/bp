@@ -906,8 +906,7 @@ alt stack."
   "The item at the top of the stack is copied and inserted before the
 second-to-top item."
   (when (>= (length (@stack state)) 2)
-    (setf (cddr (@stack state))
-          (cons (first (@stack state)) (cddr (@stack state))))
+    (push (first (@stack state)) (cddr (@stack state)))
     t))
 
 (define-opcode op_2drop 109 #x6d (state)
