@@ -45,7 +45,7 @@
 `OP_PUSH*` and `OP_PUSHDATA*` commands, argument `payload-length` - only
 for `OP_PUSHDATA*` commands."
   (cond ((and payload payload-length)
-         (cons op (cons payload-length payload)))
+         (list* op payload-length payload))
         (payload
          (cons op payload))
         (t
