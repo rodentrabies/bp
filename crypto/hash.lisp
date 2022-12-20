@@ -1,5 +1,6 @@
 (uiop:define-package :bp/crypto/hash
-    (:use :cl :ironclad)
+  (:nicknames :bp.crypto.hash)
+  (:use :cl :ironclad)
   (:export
    #:sha1
    #:ripemd160
@@ -7,7 +8,7 @@
    #:hash256
    #:hash160))
 
-(in-package :bp/crypto/hash)
+(in-package :bp.crypto.hash)
 
 (defun sha1 (bytes)
   (let ((digester (ironclad:make-digest 'ironclad:sha1)))

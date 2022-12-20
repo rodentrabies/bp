@@ -1,4 +1,6 @@
-(uiop:define-package :bp/tests/all (:use :cl)
+(uiop:define-package :bp/tests/all
+  (:nicknames :bp.tests)
+  (:use :cl)
   (:use
    :bp/tests/encoding
    :bp/tests/block

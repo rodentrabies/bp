@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/block (:use :cl)
+(uiop:define-package :bp/core/block
+  (:nicknames :bp.core.block)
+  (:use :cl)
   (:use :bp/core/encoding
         :bp/core/transaction
         :bp/crypto/hash)
@@ -18,7 +20,7 @@
    #:block-transactions
    #:block-transaction))
 
-(in-package :bp/core/block)
+(in-package :bp.core.block)
 
 
 ;;;-----------------------------------------------------------------------------

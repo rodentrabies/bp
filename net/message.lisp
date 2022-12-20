@@ -1,4 +1,6 @@
-(uiop:define-package :bp/net/message (:use :cl)
+(uiop:define-package :bp/net/message
+  (:nicknames :bp.net.message)
+  (:use :cl)
   (:use :bp/core/all
         :bp/net/address)
   (:import-from :ironclad)
@@ -32,7 +34,7 @@
    #:message-type-from-command))
 
 
-(in-package :bp/net/message)
+(in-package :bp.net.message)
 
 
 ;;;-----------------------------------------------------------------------------

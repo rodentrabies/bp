@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/merkletree (:use :cl)
+(uiop:define-package :bp/core/merkletree
+  (:nicknames :bp.core.merkletree)
+  (:use :cl)
   (:use :bp/core/encoding
         :bp/core/transaction
         :bp/crypto/hash)
@@ -7,7 +9,7 @@
    #:merkle-tree-node
    #:merkle-tree-node-hash))
 
-(in-package :bp/core/merkletree)
+(in-package :bp.core.merkletree)
 
 (defstruct merkle-tree-node
   hash

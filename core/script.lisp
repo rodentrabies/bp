@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/script (:use :cl)
+(uiop:define-package :bp/core/script
+  (:nicknames :bp.core.script)
+  (:use :cl)
   (:use
    :bp/core/encoding
    :bp/core/parameters
@@ -17,7 +19,7 @@
    ;; #:*print-script-as-assembly* ;; not exported yet
    #:*trace-script-execution*))
 
-(in-package :bp/core/script)
+(in-package :bp.core.script)
 
 
 ;;;-----------------------------------------------------------------------------

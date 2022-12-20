@@ -34,13 +34,15 @@ CASES.**
 <a id="table-of-contents"></a>
 ## Table of Contents
 - [Installation](#installation)
-- [Core](#interface)
+- [Package structure](#package-structure)
+- [`bp` - core](#core)
   - [Chain interface](#chain-interface)
   - [Model](#model)
   - [Serialization](#serialization)
   - [Validation](#validation)
-- [Network](#network)
-- [RPC](#rpc)
+- [Subsystems](#subsystems)
+  - [`bp.net` - peer-to-peer network](#network)
+  - [`bp.rpc` - RPC node connection](#rpc)
 - [Examples](#examples)
 - [API changes](#api-changes)
 - [License](#license)
@@ -88,17 +90,51 @@ CL-USER> (asdf:load-system "bp")
 ```
 
 
+
+<a id="package-structure"></a>
+## Package structure
+
+`bp` codebase utilises ASDF's `package-inferred-system` extension,
+which means that every file is a separate package whose name matches
+the filesystem path of that file relative to the root directory,
+i.e. `./core/block.lisp` file corresponds to `bp/core/block` package.
+For convenience, each package also has an nickname that replaces `/`
+with `.`, e.g. `bp/core/block` can also be referenced via
+`bp.core.block`.
+
+Files called `all.lisp` are interface packages that reexport all API
+components of their "subpackages" - packages on the same level of
+project hierarchy.
+
+Below is a table that lists the top-level components of the `bp`
+system along with the nicknames:
+
+| Interface package | Implementation packages                                                                                                                                                                   | Real package names                                                                                                                                                                            | Description                                                        |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|
+| `bp`              | `bp.core`<br>`bp.core.parameters`<br>`bp.core.chain`<br>`bp.core.block`<br>`bp.core.transaction`<br>`bp.core.script`<br>`bp.core.encoding`<br>`bp.core.consensus`<br>`bp.core.merkletree` | `bp/core/all`<br>`bp/core/parameters`<br>`bp/core/chain`<br>`bp/core/block`<br>`bp/core/transaction`<br>`bp/core/script`<br>`bp/core/encoding`<br>`bp/core/consensus`<br>`bp/core/merkletree` | Bitcoin chain data,<br>consensus, serialization,<br>core utilities |
+| `bp.crypto`       | `bp.crypto`<br>`bp.crypto.secp256k1`<br>`bp.crypto.hash`<br>`bp.crypto.random`                                                                                                            | `bp/crypto/all`<br>`bp/crypto/secp256k1`<br>`bp/crypto/hash`<br>`bp/crypto/random`                                                                                                            | Cryptographic tools                                                |
+| `bp.net`          | `bp.net`<br>`bp.net.address`<br>`bp.net.message`<br>`bp.net.node`<br>`bp.net.parameters`                                                                                                  | `bp/net/all`<br>`bp/net/address`<br>`bp/net/message`<br>`bp/net/node`<br>`bp/net/parameters`                                                                                                  | Peer-to-peer network                                               |
+| `bp.rpc`          | `bp.rpc`                                                                                                                                                                                  | `bp/rpc/all`                                                                                                                                                                                  | RPC interface to <br> Bitcoin node                                 |
+
+Please note that it is **strongly advised** to use the `.`-separated
+package names in user code. The reason for this advice is that I want
+to eventually get rid of the `/`-separated names completely. Also,
+please avoid using package names from the columns 2 and 3 because
+these might change in the future.
+
+
+
 <a id="core"></a>
-## Core
+## `bp` - core
 
 Currently this library only provides utilities for stateless
 interaction with Bitcoin from REPL. Storage, wallet and full node
 capabilities are somewhere in a distant future.
 
 Note that at this point only the symbols exported from the package
-`bp/core/all` (nicknamed `bp`) can be considered an API - changes to
-these functions and classes will be kept to a minimum. Everything else
-will likely be changing a lot.
+`bp` can be considered API - changes to these functions and classes
+will be kept to a minimum. Everything else will likely be changing a
+lot.
 
 
 <a id="chain-interface"></a>
@@ -109,7 +145,7 @@ allow to pull chain data from any external supplier specified with the
 `bp:with-chain-supplier` macro:
 
 ``` lisp
-CL-USER> (bp:with-chain-supplier (bprpc:node-rpc-connection
+CL-USER> (bp:with-chain-supplier (bp.rpc:node-rpc-connection
                                   :url "http://localhost:8332"
                                   :username "btcuser"
                                   :password "btcpassword")
@@ -256,10 +292,17 @@ T
 ```
 
 
-<a id="network"></a>
-## Network
 
-**BP** provides simple utilities for interacting with Bitcoin
+<a id="subsystems"></a>
+## Subsystems
+
+Below is the list of subsystems of `bp` that try to keep components of
+`bp` more or less self-contained.
+
+<a id="network"></a>
+### `bp.net` - peer-to-peer network
+
+`bp.net` package provides simple utilities for interacting with Bitcoin
 network - a subset of network messages and functions for establishing
 connections with other network nodes as well as requesting blocks and
 transactions.
@@ -285,28 +328,28 @@ Executing the following forms from Lisp REPL will perform a handshake
 with Bitcoin node:
 
 ``` lisp
-CL-USER> (defvar *node* (make-instance 'bpnet:simple-node :network :regtest))
+CL-USER> (defvar *node* (make-instance 'bp.net:simple-node :network :regtest))
 ...
-CL-USER> (bpnet:connect-peer *node* :host "127.0.0.1" :port 18444)
+CL-USER> (bp.net:connect-peer *node* :host "127.0.0.1" :port 18444)
 ...
 ```
 
-`bpnet:simple-node` is a very simple network node implementation that
-maintains a single peer connection and provides `bpnet:send-message`
-and `bpnet:receive-message` functions for sending and receiving
+`bp.net:simple-node` is a very simple network node implementation that
+maintains a single peer connection and provides `bp.net:send-message`
+and `bp.net:receive-message` functions for sending and receiving
 messages, respectively.
 
-Alternatively, `bpnet:simple-node` can be asked to discover a peer
+Alternatively, `bp.net:simple-node` can be asked to discover a peer
 using a hardcoded DNS seed, but this is currently only supported on
 mainnet. The following form will select a random peer and shake hands
 with it:
 
 ``` lisp
-CL-USER> (setf *node* (make-instance 'bpnet:simple-node :peer :discover))
+CL-USER> (setf *node* (make-instance 'bp.net:simple-node :peer :discover))
 ...
 ```
 
-Objects of `bpnet:simple-node` partially implement chain supplier
+Objects of `bp.net:simple-node` partially implement chain supplier
 interface - `bp:chain-get-block-hash` is currently not supported,
 `bp:chain-get-transaction` only returns transactions that are
 currently in the mempool or in relay set (this is an [intentional
@@ -324,26 +367,26 @@ CL-USER> (bp:chain-get-block *node* <block-hash>)
 
 
 <a id="rpc"></a>
-## RPC
+### `bp.rpc` - RPC node connection
 
-`bprpc` package provides that `bprpc:node-rpc-connection` class which
+`bp.rpc` package provides that `bp.rpc:node-rpc-connection` class which
 is is an RPC client to the `bitcoind` RPC server. It was mentioned
 above as one of the implementations of the chain supplier interface,
 but it also supports the following RPC operations that correspond to
 the `bitcoind` RPC methods (and `bitcoin-cli` commands) with the same
 name:
 
-- `bprpc:getblockhash`;
-- `bprpc:getblock`;
-- `bprpc:getrawtransaction`;
-- `bprpc:getchaintxstats`.
+- `bp.rpc:getblockhash`;
+- `bp.rpc:getblock`;
+- `bp.rpc:getrawtransaction`;
+- `bp.rpc:getchaintxstats`.
 
 Note that results of RPC operations are `jsown` JSON structures, so
 specific parts of these structures have to be extracted manually:
 
 ``` lisp
-cl-user> (let* ((node-connection (make-instance 'bprpc:node-rpc-connection :url <url>))
-                (chain-stats (bprpc:getchaintxstats node-connection))
+cl-user> (let* ((node-connection (make-instance 'bp.rpc:node-rpc-connection :url <url>))
+                (chain-stats (bp.rpc:getchaintxstats node-connection))
                 (chain-blocks (jsown:val chain-stats "window_final_block_height"))
                 (chain-txs (jsown:val chain-stats "txcount")))
            (format t "Blocks: ~a, transactions: ~a~%" chain-blocks chain-txs))
@@ -365,6 +408,6 @@ See [CHANGELOG.md](CHANGELOG.md).
 <a id="license"></a>
 ## License
 
-Copyright (c) 2019-2021 Seibart Nedor \<rodentrabies@protonmail.com\>
+Copyright (c) 2019-2022 Seibart Nedor \<rodentrabies@protonmail.com\>
 
 Licensed under MIT License. See [LICENSE](LICENSE).

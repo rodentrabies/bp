@@ -1,8 +1,10 @@
-(uiop:define-package :bp/tests/block (:use :cl :fiveam)
+(uiop:define-package :bp/tests/block
+  (:nicknames :bp.tests.block)
+  (:use :cl :fiveam)
   (:use :bp/core/all
         :bp/tests/data))
 
-(in-package :bp/tests/block)
+(in-package :bp.tests.block)
 
 (def-suite block-tests
     :description "Tests for block parsing, serialization and

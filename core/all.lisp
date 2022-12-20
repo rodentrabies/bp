@@ -1,5 +1,6 @@
-(uiop:define-package :bp/core/all (:use :cl)
-  (:nicknames :bp)
+(uiop:define-package :bp/core/all
+  (:nicknames :bp :bp.core)
+  (:use :cl)
   (:use-reexport
    :bp/core/encoding
    :bp/core/transaction

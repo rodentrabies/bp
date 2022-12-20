@@ -1,10 +1,12 @@
-(uiop:define-package :bp/tests/transaction (:use :cl :fiveam)
+(uiop:define-package :bp/tests/transaction
+  (:nicknames :bp.tests.transaction)
+  (:use :cl :fiveam)
   (:use :bp/core/all
         :bp/tests/data)
   (:import-from :bp/core/block
                 #:block-header-version))
 
-(in-package :bp/tests/transaction)
+(in-package :bp.tests.transaction)
 
 (def-suite transaction-tests
     :description "Tests for transaction parsing, serialization and

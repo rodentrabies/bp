@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/consensus (:use :cl)
+(uiop:define-package :bp/core/consensus
+  (:nicknames :bp.core.consensus)
+  (:use :cl)
   (:use :bp/core/encoding
         :bp/core/chain
         :bp/core/merkletree
@@ -13,7 +15,7 @@
    #:validation-context
    #:make-validation-context))
 
-(in-package :bp/core/consensus)
+(in-package :bp.core.consensus)
 
 
 ;;; The definitions in this file contain Bitcoin consensus rules. The

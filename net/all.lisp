@@ -1,4 +1,5 @@
-(uiop:define-package :bp/net/all (:nicknames :bpnet)
+(uiop:define-package :bp/net/all
+  (:nicknames :bp.net)
   (:use-reexport
    :bp/net/parameters
    :bp/net/address

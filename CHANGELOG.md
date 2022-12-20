@@ -12,6 +12,10 @@ as consistent as possible.
 
 ## BP 0.0.4
 
+- **BREAKING**: package nicknames `bpcore`, `bpcrypto`, `bprpc` and
+  `bpnet` were removed in favor of the new `.`-seraparted nicknames
+  that should be preferred in all cases.
+
 - New representation format for `OP_PUSHDATA*` script commands now
   includes a byte sequence representation of the length of the payload
   to ensure `(serialize (parse ...))` produces the same byte sequence
@@ -20,7 +24,7 @@ as consistent as possible.
 ## BP 0.0.3
 
 - The RPC-based chain supplier `bp:node-connection` was renamed to
-  `bprpc:node-rpc-connection` for clarity. It is still possible to use
+  `bp.rpc:node-rpc-connection` for clarity. It is still possible to use
   the `bp:node-connection` name, but it will issue a warning and will
   be removed in one of the next `0.0.*` releases.
 

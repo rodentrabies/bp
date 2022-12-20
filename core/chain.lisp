@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/chain (:use :cl)
+(uiop:define-package :bp/core/chain
+  (:nicknames :bp.core.chain)
+  (:use :cl)
   (:use :bp/core/block
         :bp/core/transaction
         :bp/core/encoding)
@@ -27,7 +29,7 @@
    #:unknown-transaction-error
    #:unknown-transaction-id))
 
-(in-package :bp/core/chain)
+(in-package :bp.core.chain)
 
 
 ;;;-----------------------------------------------------------------------------

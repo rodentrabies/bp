@@ -1,4 +1,6 @@
-(uiop:define-package :bp/net/parameters (:use :cl)
+(uiop:define-package :bp/net/parameters
+  (:nicknames :bp.net.parameters)
+  (:use :cl)
   (:use :bp/core/all)
   (:export
    ;; Network constants:
@@ -22,7 +24,7 @@
    #:*user-agent*))
 
 
-(in-package :bp/net/parameters)
+(in-package :bp.net.parameters)
 
 ;;;-----------------------------------------------------------------------------
 ;;; Network contants

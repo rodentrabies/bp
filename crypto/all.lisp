@@ -1,5 +1,6 @@
-(uiop:define-package :bp/crypto/all (:use :cl)
-  (:nicknames :bpcrypto)
+(uiop:define-package :bp/crypto/all
+  (:nicknames :bp.crypto)
+  (:use :cl)
   (:use-reexport
    :bp/crypto/random
    :bp/crypto/hash

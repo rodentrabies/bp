@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/transaction (:use :cl)
+(uiop:define-package :bp/core/transaction
+  (:nicknames :bp.core.transaction)
+  (:use :cl)
   (:use
    :bp/core/encoding
    :bp/core/script
@@ -31,7 +33,7 @@
    #:witness
    #:witness-items))
 
-(in-package :bp/core/transaction)
+(in-package :bp.core.transaction)
 
 (defstruct tx
   version

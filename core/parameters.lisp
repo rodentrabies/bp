@@ -1,4 +1,6 @@
-(uiop:define-package :bp/core/parameters (:use :cl)
+(uiop:define-package :bp/core/parameters
+  (:nicknames :bp.core.parameters)
+  (:use :cl)
   (:export
    ;; Constants:
    #:+initial-block-reward+
@@ -12,7 +14,7 @@
    ;; BP-specific parameters:
    #:*bp-version*))
 
-(in-package :bp/core/parameters)
+(in-package :bp.core.parameters)
 
 
 

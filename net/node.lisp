@@ -1,4 +1,6 @@
-(uiop:define-package :bp/net/node (:use :cl)
+(uiop:define-package :bp/net/node
+  (:nicknames :bp.net.node)
+  (:use :cl)
   (:use :bp/core/all
         :bp/crypto/all
         :bp/net/parameters
@@ -21,7 +23,7 @@
    #:node-host
    #:node-port))
 
-(in-package :bp/net/node)
+(in-package :bp.net.node)
 
 
 ;;;-----------------------------------------------------------------------------

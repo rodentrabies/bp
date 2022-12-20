@@ -15,6 +15,7 @@
 
 
 (defpackage :bp/examples/bprdf
+  (:nicknames :bp.examples.bprdf)
   (:use :cl :bp :db.agraph)
   (:import-from :bp/core/script
                 #:*print-script-as-assembly*)
@@ -40,7 +41,7 @@
            #:stop-load
            #:*status-check-period*))
 
-(in-package :bp/examples/bprdf)
+(in-package :bp.examples.bprdf)
 
 (defvar *workers* nil
   "A place to store loader processes to be able to conveniently stop
@@ -58,7 +59,7 @@ them at once.")
   (handler-case
       (with-open-triple-store (db dst :if-does-not-exist :error)
         (unwind-protect
-             (with-chain-supplier (bprpc:node-rpc-connection :url src)
+             (with-chain-supplier (bp.rpc:node-rpc-connection :url src)
                (with-buffered-triple-adds (db :limit 10000)
                  (load-blocks block-queue)))
           (rollback-triple-store :db db)))
@@ -86,8 +87,8 @@ opened as REMOTE-TRIPLE-STORE."
     (let* ((loaded-blocks-query "SELECT DISTINCT ?h { ?b bp:blockHeight ?h } ORDER BY ?h")
            (loaded-blocks (sparql:run-sparql loaded-blocks-query :output-format :lists))
            (loaded-blocks-list (mapcar (lambda (r) (part->value (first r))) loaded-blocks))
-           (node-connection (make-instance 'bprpc:node-rpc-connection :url src))
-           (initial-chain-stats (bprpc:getchaintxstats node-connection))
+           (node-connection (make-instance 'bp.rpc:node-rpc-connection :url src))
+           (initial-chain-stats (bp.rpc:getchaintxstats node-connection))
            (highest-known-block (jsown:val initial-chain-stats "window_final_block_height")))
       (flet ((%within-range (i)
                (and (or (not from-height) (>= i from-height))
@@ -113,7 +114,7 @@ opened as REMOTE-TRIPLE-STORE."
         ;; Start the status check loop.
         (handler-case
             (loop
-              (let* ((chain-stats (bprpc:getchaintxstats node-connection))
+              (let* ((chain-stats (bp.rpc:getchaintxstats node-connection))
                      (chain-blocks (jsown:val chain-stats "window_final_block_height"))
                      (chain-txs (jsown:val chain-stats "txcount"))
                      (blocks (sparql:run-sparql "SELECT DISTINCT ?b { ?b a bp:Block }"
@@ -290,10 +291,10 @@ opened as REMOTE-TRIPLE-STORE."
 #+test
 ;; On first invocation, choose the number of workers that will utilize
 ;; the underlying machine to the optimum.
-(bp/examples/bprdf:start-load "http://user:password@127.0.0.1:8332"
+(bp.examples.bprdf:start-load "http://user:password@127.0.0.1:8332"
                               "http://user:password@127.0.0.1:10035/repositories/bprdf"
                               :workers 4 :cleanp t)
 
 #+test
 ;; In order to stop the load, do:
-(bp/examples/bprdf:stop-load)
+(bp.examples.bprdf:stop-load)

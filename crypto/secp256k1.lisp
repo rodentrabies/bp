@@ -1,6 +1,7 @@
-(uiop:define-package :bp/crypto/secp256k1 (:use :cl :cffi :ironclad)
+(uiop:define-package :bp/crypto/secp256k1
+  (:nicknames :bp.crypto.secp256k1 :secp256k1)
+  (:use :cl :cffi :ironclad)
   (:use :bp/crypto/random)
-  (:nicknames :secp256k1)
   (:shadow
    ;; Ironclad's symbols
    #:make-signature
@@ -39,7 +40,7 @@
    #:parse-signature
    #:serialize-signature))
 
-(in-package :bp/crypto/secp256k1)
+(in-package :bp.crypto.secp256k1)
 
 ;;; This file contains manual translation of the secp256k1.h file from
 ;;; libsecp256k1/include directory as well as wrappers around API functions that

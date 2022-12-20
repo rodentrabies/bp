@@ -1,8 +1,10 @@
-(uiop:define-package :bp/tests/script (:use :cl :fiveam)
+(uiop:define-package :bp/tests/script
+  (:nicknames :bp.tests.script)
+  (:use :cl :fiveam)
   (:use :bp/core/all
         :bp/tests/data))
 
-(in-package :bp/tests/script)
+(in-package :bp.tests.script)
 
 (def-suite script-tests
     :description "Various script tests.")
@@ -10,7 +12,7 @@
 (in-suite script-tests)
 
 (test standard-script-types
-  :description "Test that `bp/core/script:script-standard-p' function recognizes
+  :description "Test that `bp.core.script:script-standard-p' function recognizes
 types of standard scripts."
   (with-chain-supplier (test-chain-supplier)
     (loop

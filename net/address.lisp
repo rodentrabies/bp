@@ -1,4 +1,6 @@
-(uiop:define-package :bp/net/address (:use :cl)
+(uiop:define-package :bp/net/address
+  (:nicknames :bp.net.address)
+  (:use :cl)
   (:use :bp/core/encoding)
   (:import-from :usocket)
   (:export
@@ -8,7 +10,7 @@
    #:address-from-bytes
    #:random-peer-address))
 
-(in-package :bp/net/address)
+(in-package :bp.net.address)
 
 ;;; Address management and peer-discovery utilities.
 

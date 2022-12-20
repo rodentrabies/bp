@@ -1,8 +1,10 @@
-(uiop:define-package :bp/crypto/random (:use :cl)
+(uiop:define-package :bp/crypto/random
+  (:nicknames :bp.crypto.random)
+  (:use :cl)
   (:export
    #:random-bytes))
 
-(in-package :bp/crypto/random)
+(in-package :bp.crypto.random)
 
 (defun random-bytes (size)
   (let ((buffer (make-array size :element-type '(unsigned-byte 8))))

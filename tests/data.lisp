@@ -1,4 +1,6 @@
-(uiop:define-package :bp/tests/data (:use :cl)
+(uiop:define-package :bp/tests/data
+  (:nicknames :bp.tests.data)
+  (:use :cl)
   (:use :bp/core/all)
   (:export
    #:test-chain-supplier
@@ -8,7 +10,7 @@
    #:*test-chain-transactions*
    #:*all-test-transactions*))
 
-(in-package :bp/tests/data)
+(in-package :bp.tests.data)
 
 ;;; Storage for test chain supplier.
 (defvar *test-chain-block-hashes* (make-hash-table)
