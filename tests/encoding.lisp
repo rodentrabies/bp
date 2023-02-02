@@ -1,7 +1,5 @@
 (uiop:define-package :bp/tests/encoding (:use :cl :fiveam)
-  (:use :bp/core/all)
-  (:import-from :bp/crypto/random
-                #:random-bytes))
+  (:use :bp/core/all))
 
 (in-package :bp/tests/encoding)
 
@@ -18,25 +16,15 @@ Protocol.")
 (test base58-isomorphism
   :description "Randomized test that verifies that the BASE58-ENCODE
 and BASE58-DECODE functions form an isomorphism."
-  (loop
-    :for i :below 1000
-    :for original-bytes := (random-bytes 100)
-    :for bytes := (base58-decode (base58-encode original-bytes))
-    :if (not (equalp original-bytes bytes))
-      :do (fail "base58-decode(base58-encode(~s)) = ~s" original-bytes bytes))
-  (pass "Success."))
+  (for-all ((bytes (gen-buffer)))
+    (is (equalp bytes (base58-decode (base58-encode bytes))))))
 
 (test base58check-isomorphism
   :description "Randomized test that verifies that the
 BASE58CHECK-ENCODE and BASE58CHECK-DECODE functions form an
 isomorphism."
-  (loop
-     :for i :below 1000
-     :for original-bytes := (random-bytes 100)
-     :for bytes := (base58check-decode (base58check-encode original-bytes))
-     :if (not (equalp original-bytes bytes))
-     :do (fail "base58check-decode(base58check-encode(~s)) = ~s" original-bytes bytes))
-  (pass "Success."))
+  (for-all ((bytes (gen-buffer)))
+    (is (equalp bytes (base58check-decode (base58check-encode bytes))))))
 
 (test base58-corner-cases
   :description "Corner cases for BASE58 encoding."
@@ -88,15 +76,10 @@ isomorphism."
       (error "Segwit version must be in between 0 and 16.")))
 
 (test bech32-isomorphism
-      :description "Randomized test that verifies that the BECH32-ENCODE
+  :description "Randomized test that verifies that the BECH32-ENCODE
 and BECH32-DECODE functions form an isomorphism."
-      (loop
-        :for i :below 1000
-        :for original-bytes := (random-bytes 100)
-        :for bytes := (bech32-assert-decode (bech32-encode "iso" original-bytes))
-        :if (not (equalp original-bytes bytes))
-          :do (fail "bech32-decode(bech32-encode(~s)) = ~s" original-bytes bytes))
-      (pass "Success."))
+  (for-all ((bytes (gen-buffer)))
+    (is (equalp bytes (bech32-assert-decode (bech32-encode "iso" bytes))))))
 
 (defvar *bech32-valid-test-vectors*
   '(("a" "" "A12UEL5L")
@@ -178,13 +161,8 @@ from BIP-0173 document."
 (test bech32m-isomorphism
   :description "Randomized test that verifies that Bech32m variants of
 the BECH32-ENCODE and BECH32-DECODE functions form an isomorphism."
-  (loop
-    :for i :below 1000
-    :for original-bytes := (random-bytes 100)
-    :for bytes := (bech32m-assert-decode (bech32-encode "iso" original-bytes :bech32m-p t))
-    :if (not (equalp original-bytes bytes))
-    :do (fail "bech32m-decode(bech32m-encode(~s)) = ~s" original-bytes bytes))
-  (pass "Success."))
+  (for-all ((bytes (gen-buffer)))
+    (is (equalp bytes (bech32m-assert-decode (bech32-encode "iso" bytes :bech32m-p t))))))
 
 (defvar *bech32m-valid-test-vectors*
   '(("a" "" "A1LQFN3A")
