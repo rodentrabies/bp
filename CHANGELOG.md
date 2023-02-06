@@ -17,6 +17,11 @@ as consistent as possible.
   to ensure `(serialize (parse ...))` produces the same byte sequence
   even for scripts with unexpected ends.
 
+- Functions `bp/crypto/secp256k1:context-create-{none,sign,verify}`
+  for context initialization no longer exist and their functionality
+  has been replaced with `bp/crypto/secp256k1::context-create` and
+  `bp/crypto/secp256k1::context-randomize` which are unexported.
+
 ## BP 0.0.3
 
 - The RPC-based chain supplier `bp:node-connection` was renamed to
