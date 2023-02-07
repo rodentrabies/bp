@@ -349,7 +349,8 @@ pattern:
     OP_EQUAL"
   ;; TODO: this must also check block timestamp > 1333238400
   (let ((commands (script-commands script-pubkey)))
-    (and (= (length commands) 3)
+    (and *bip-0016-active-p*
+         (= (length commands) 3)
          (= (command-opcode (aref commands 0)) (opcode :op_hash160))
          (= (command-opcode (aref commands 1)) (opcode :op_push20))
          (= (command-opcode (aref commands 2)) (opcode :op_equal)))))
@@ -360,7 +361,7 @@ Witness) structure:
     <version-byte>    (1 byte, OP_{0..16})
     <witness-program> (2-40 bytes)"
   (let ((commands (script-commands script-pubkey)))
-    (when (= (length commands) 2)
+    (when (and *bip-0141-active-p* (= (length commands) 2))
       (let ((version (command-opcode (aref commands 0)))
             (program (command-payload (aref commands 1))))
         (and
@@ -392,10 +393,11 @@ script structure:
 
 (defun p2tr-p (script-pubkey)
   "Check if given SCRIPT-PUBKEY indicates a Pat to Taproot script
-sturcture:
+structure:
    OP_1
    <32-byte witness-program>"
   (and
+   *bip-0341-active-p*
    (segwit-p script-pubkey)
    (eq 1 (command-number (aref (script-commands script-pubkey) 0)))
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
@@ -408,34 +410,27 @@ script as a second value."
   (let ((commands (script-commands script-pubkey)))
     (cond
       ((segwit-p script-pubkey)
-       (if *bip-0141-active-p*
-           (let* ((type (cond ((p2wpkh-p script-pubkey)
-                               :p2wpkh)
-                              ((p2wsh-p script-pubkey)
-                               :p2wsh)
-                              ((and *bip-0341-active-p* (p2tr-p script-pubkey))
-                               :p2tr)))
-                  (hrp (ecase network
-                         (:mainnet "bc")
-                         (:testnet "tb")))
-                  (witness-version (command-number (aref commands 0)))
-                  (payload (command-payload (aref commands 1)))
-                  (full-payload (concatenate 'vector (vector witness-version) payload))
-                  (address (bech32-encode hrp full-payload
-                                          :versionp t
-                                          :bech32m-p (eq type :p2tr))))
-             (values type address))
-           (values nil nil)))
+       (let* ((type (cond ((p2wpkh-p script-pubkey) :p2wpkh)
+                          ((p2wsh-p  script-pubkey) :p2wsh)
+                          ((p2tr-p   script-pubkey) :p2tr)))
+              (hrp (ecase network
+                     (:mainnet "bc")
+                     (:testnet "tb")))
+              (witness-version (command-number (aref commands 0)))
+              (payload (command-payload (aref commands 1)))
+              (full-payload (concatenate 'vector (vector witness-version) payload))
+              (address (bech32-encode hrp full-payload
+                                      :versionp t
+                                      :bech32m-p (eq type :p2tr))))
+         (values type address)))
       ((p2sh-p script-pubkey)
-       (if *bip-0016-active-p*
-           (let* ((version (ecase network
-                             (:mainnet 5)
-                             (:testnet 196)))
-                  (payload (command-payload (aref commands 1)))
-                  (full-payload (concatenate 'vector (vector version) payload))
-                  (address (base58check-encode full-payload)))
-             (values :p2sh address))
-           (values nil nil)))
+       (let* ((version (ecase network
+                         (:mainnet 5)
+                         (:testnet 196)))
+              (payload (command-payload (aref commands 1)))
+              (full-payload (concatenate 'vector (vector version) payload))
+              (address (base58check-encode full-payload)))
+         (values :p2sh address)))
       ((p2pkh-p script-pubkey)
        (let* ((version (ecase network
                          (:mainnet 0)
@@ -579,12 +574,10 @@ value will write the trace to that stream).")
           (setf (@sigversion state) (script-sigversion redeem-script))
           (cond
             ;; P2SH-P2WPKH (P2WPKH nested in P2SH).
-            ((and *bip-0141-active-p*
-                  (p2wpkh-p redeem-script))
+            ((p2wpkh-p redeem-script)
              (execute-p2wpkh redeem-script :state state))
             ;; P2SH-P2WSH (P2WSH nested in P2SH).
-            ((and *bip-0141-active-p*
-                  (p2wsh-p redeem-script))
+            ((p2wsh-p redeem-script)
              (execute-p2wsh redeem-script :state state))
             ;; Regular P2SH.
             (t
@@ -642,15 +635,11 @@ stack and performing the special rule detection (P2SH, SegWit)."
     ;; overwritten in EXECUTE-P2SH.
     (setf (@sigversion state) (script-sigversion script-pubkey))
     (cond
-      ((and *bip-0016-active-p*
-            (p2sh-p script-pubkey))
+      ((p2sh-p script-pubkey)
        (execute-p2sh script-pubkey :state state))
-      ((and *bip-0141-active-p*
-            (p2wpkh-p script-pubkey))
+      ((p2wpkh-p script-pubkey)
        (execute-p2wpkh script-pubkey :state state))
-      ((and *bip-0016-active-p*
-            *bip-0141-active-p*
-            (p2wsh-p script-pubkey))
+      ((p2wsh-p script-pubkey)
        (execute-p2wsh script-pubkey :state state))
       (t
        (execute-script script-pubkey :state state)))))
