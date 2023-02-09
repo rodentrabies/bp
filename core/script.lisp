@@ -615,6 +615,12 @@ value will write the trace to that stream).")
       (ironclad:with-octet-input-stream (stream witness-script-bytes)
         (execute-script (parse 'script stream) :state state)))))
 
+(defun execute-p2tr (script-pubkey &key state)
+  (let* ((witness (@witness state))
+         (witness-length (length witness))
+         (witness-stack (coerce witness 'list))))
+  (execute-script script-pubkey :state state))
+
 (defun script-sigversion (script)
   "For non-SegWit transactions, signature version is represented as
 constant :BASE, and for SegWit ones - :WITNESS-V<N>, where N is the
@@ -641,6 +647,8 @@ stack and performing the special rule detection (P2SH, SegWit)."
        (execute-p2wpkh script-pubkey :state state))
       ((p2wsh-p script-pubkey)
        (execute-p2wsh script-pubkey :state state))
+      ((p2tr-p script-pubkey)
+       (execute-p2tr script-pubkey :state state))
       (t
        (execute-script script-pubkey :state state)))))
 
