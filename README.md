@@ -1,16 +1,17 @@
 # BP - Bitcoin Protocol
 
-[secp256k1]: https://github.com/bitcoin-core/secp256k1
+[asdf-registry]: https://common-lisp.net/project/asdf/asdf/Configuring-ASDF-to-find-your-systems.html
 [asdf]: https://gitlab.common-lisp.net/asdf/asdf
-[cffi]: https://github.com/cffi/cffi
-[ironclad]: https://github.com/sharplispers/ironclad
-[usocket]: https://github.com/usocket/usocket
 [aserve]: https://sourceforge.net/projects/portableaserve
+[bip-0034]: https://github.com/bitcoin/bips/blob/master/bip-0034.mediawiki
+[brdf]: https://github.com/rodentrabies/brdf
+[cffi]: https://github.com/cffi/cffi
+[getdata-docs]: https://en.bitcoin.it/wiki/Protocol_documentation#getdata
+[ironclad]: https://github.com/sharplispers/ironclad
 [jsown]: https://github.com/madnificent/jsown
 [quicklisp]: https://www.quicklisp.org/beta
-[asdf-registry]: https://common-lisp.net/project/asdf/asdf/Configuring-ASDF-to-find-your-systems.html
-[bip-0034]: https://github.com/bitcoin/bips/blob/master/bip-0034.mediawiki
-[getdata-docs]: https://en.bitcoin.it/wiki/Protocol_documentation#getdata
+[secp256k1]: https://github.com/bitcoin-core/secp256k1
+[usocket]: https://github.com/usocket/usocket
 
 [![Quicklisp](http://quickdocs.org/badge/bp.svg)](https://quickref.common-lisp.net/bp.html)
 [![Build Status](https://travis-ci.com/rodentrabies/bp.svg?branch=master)](https://travis-ci.com/rodentrabies/bp)
@@ -351,7 +352,7 @@ cl-user> (let* ((node-connection (make-instance 'bprpc:node-rpc-connection :url 
 <a id="examples"></a>
 ## Examples
 
-- [BPRDF - Bitcoin chain data represented as RDF](examples/bprdf/)
+- [BRDF - Bitcoin time chain data represented as RDF][brdf]
 
 
 
