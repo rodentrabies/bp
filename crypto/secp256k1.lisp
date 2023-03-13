@@ -1805,8 +1805,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 (defun parse-pubkey (bytes)
   (%make-pubkey :bytes (ec-pubkey-parse bytes)))
 
-(defun serialize-pubkey (key)
-  (ec-pubkey-serialize (key-bytes key)))
+(defun serialize-pubkey (pubkey &key compressed)
+  (ec-pubkey-serialize (pubkey-bytes pubkey) :compressed compressed))
 
 (defun parse-signature (bytes &key (type :relaxed))
   (let* ((bytes (ecase type
