@@ -29,6 +29,7 @@
    #:make-pubkey
    #:parse-pubkey
    #:serialize-pubkey
+   #:combine-pubkeys
    #:signature
    #:make-signature
    #:verify-signature
@@ -1104,6 +1105,21 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ins (:pointer (:pointer (:struct secp256k1-pubkey))))
   (n   size))
 
+(defun ec-pubkey-combine (ins)
+  (let ((n (length ins)))
+    (with-foreign-objects
+        ((cins    '(:struct secp256k1-pubkey) n)
+         (pins    '(:pointer (:struct secp256k1-pubkey)) n)
+         (cpubkey '(:struct secp256k1-pubkey)))
+      (loop
+        :for i   :below n
+        :for in  :in ins
+        :for cin := (mem-aptr cins '(:struct secp256k1-pubkey) i)
+        :do (bytes-to-foreign in cin 64)
+            (setf (mem-aref pins '(:pointer (:struct secp256k1-pubkey)) i) cin))
+      (secp256k1-ec-pubkey-combine *secp256k1-context* cpubkey pins n)
+      (bytes-from-foreign nil cpubkey 64))))
+
 ;; Compute a tagged hash as defined in BIP-340.
 ;;
 ;; This is useful for creating a message hash and achieving domain separation
@@ -1832,3 +1848,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (let* ((bytes  (signature-bytes signature))
          (nbytes (ecdsa-signature-normalize bytes)))
     (ecdsa-verify (or nbytes bytes) hash (pubkey-bytes pubkey))))
+
+(defun combine-pubkeys (&rest pubkeys)
+  (%make-pubkey
+   :bytes
+   (ec-pubkey-combine (mapcar #'pubkey-bytes pubkeys))))
