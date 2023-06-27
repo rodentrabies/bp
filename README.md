@@ -366,6 +366,8 @@ See [CHANGELOG.md](CHANGELOG.md).
 <a id="license"></a>
 ## License
 
-Copyright (c) 2019-2021 Seibart Nedor \<rodentrabies@protonmail.com\>
+Copyright (c) 2019-2021 whythat \<whythat@protonmail.com\>\
+Copyright (c) 2021-2023 rodentrabies \<rodentrabies@protonmail.com\>\
+Copyright (c) 2019-2023 BP Developers & Contributors
 
 Licensed under MIT License. See [LICENSE](LICENSE).

@@ -1,7 +1,10 @@
+;;; Copyright (c) 2019-2023 BP Developers & Contributors
+;;; See the accompanying file LICENSE for the full license governing this code.
+
 (defsystem "bp"
   :description "Bitcoin Protocol components in Common Lisp"
   :version "0.0.3"
-  :author "Seibart Nedor <rodentrabies@protonmail.com>"
+  :author "rodentrabies <rodentrabies@protonmail.com>"
   :license "MIT"
   :class :package-inferred-system
   :pathname #P"./"

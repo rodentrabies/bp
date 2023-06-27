@@ -1,3 +1,6 @@
+;;; Copyright (c) 2019-2023 BP Developers & Contributors
+;;; See the accompanying file LICENSE for the full license governing this code.
+
 (uiop:define-package :bp/tests/transaction (:use :cl :fiveam)
   (:use :bp/core/all
         :bp/tests/data)
