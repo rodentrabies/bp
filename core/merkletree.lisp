@@ -1,16 +1,17 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/merkletree (:use :cl)
-  (:use :bp/core/encoding
-        :bp/core/transaction
-        :bp/crypto/hash)
+(uiop:define-package :bp.core.merkletree (:nicknames :bp/core/merkletree)
+  (:use :cl)
+  (:use :bp.core.encoding
+        :bp.core.transaction
+        :bp.crypto.hash)
   (:export
    #:build-merkle-tree
    #:merkle-tree-node
    #:merkle-tree-node-hash))
 
-(in-package :bp/core/merkletree)
+(in-package :bp.core.merkletree)
 
 (defstruct merkle-tree-node
   hash

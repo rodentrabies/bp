@@ -1,9 +1,10 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/net/message (:use :cl)
-  (:use :bp/core/all
-        :bp/net/address)
+(uiop:define-package :bp.net.message (:nicknames :bp/net/message)
+  (:use :cl)
+  (:use :bp.core
+        :bp.net.address)
   (:import-from :ironclad)
   (:import-from :usocket)
   ;; Messages and their field accessors are automatically exported by
@@ -35,7 +36,7 @@
    #:message-type-from-command))
 
 
-(in-package :bp/net/message)
+(in-package :bp.net.message)
 
 
 ;;;-----------------------------------------------------------------------------

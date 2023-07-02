@@ -1,8 +1,9 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/net/address (:use :cl)
-  (:use :bp/core/encoding)
+(uiop:define-package :bp.net.address (:nicknames :bp/net/address)
+  (:use :cl)
+  (:use :bp.core.encoding)
   (:import-from :usocket)
   (:export
    ;; Address utilities:
@@ -11,7 +12,7 @@
    #:address-from-bytes
    #:random-peer-address))
 
-(in-package :bp/net/address)
+(in-package :bp.net.address)
 
 ;;; Address management and peer-discovery utilities.
 

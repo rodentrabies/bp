@@ -1,8 +1,9 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/tests/data (:use :cl)
-  (:use :bp/core/all)
+(uiop:define-package :bp.tests.data
+  (:use :cl)
+  (:use :bp.core)
   (:export
    #:test-chain-supplier
    #:*test-chain-block-hashes*
@@ -11,7 +12,7 @@
    #:*test-chain-transactions*
    #:*all-test-transactions*))
 
-(in-package :bp/tests/data)
+(in-package :bp.tests.data)
 
 ;;; Storage for test chain supplier.
 (defvar *test-chain-block-hashes* (make-hash-table)

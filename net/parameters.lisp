@@ -1,8 +1,9 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/net/parameters (:use :cl)
-  (:use :bp/core/all)
+(uiop:define-package :bp.net.parameters (:nicknames :bp/net/parameters)
+  (:use :cl)
+  (:use :bp.core)
   (:export
    ;; Network constants:
    #:+network-magic+
@@ -25,7 +26,7 @@
    #:*user-agent*))
 
 
-(in-package :bp/net/parameters)
+(in-package :bp.net.parameters)
 
 ;;;-----------------------------------------------------------------------------
 ;;; Network contants

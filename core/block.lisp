@@ -1,10 +1,11 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/block (:use :cl)
-  (:use :bp/core/encoding
-        :bp/core/transaction
-        :bp/crypto/hash)
+(uiop:define-package :bp.core.block (:nicknames :bp/core/block)
+  (:use :cl)
+  (:use :bp.core.encoding
+        :bp.core.transaction
+        :bp.crypto.hash)
   (:export
    ;; Block header API:
    #:block-header
@@ -21,7 +22,7 @@
    #:block-transactions
    #:block-transaction))
 
-(in-package :bp/core/block)
+(in-package :bp.core.block)
 
 
 ;;;-----------------------------------------------------------------------------

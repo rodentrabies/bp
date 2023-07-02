@@ -1,11 +1,12 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/transaction (:use :cl)
+(uiop:define-package :bp.core.transaction (:nicknames :bp/core/transaction)
+  (:use :cl)
   (:use
-   :bp/core/encoding
-   :bp/core/script
-   :bp/crypto/hash)
+   :bp.core.encoding
+   :bp.core.script
+   :bp.crypto.hash)
   (:export
    ;; Transaction API:
    #:tx
@@ -34,7 +35,7 @@
    #:witness
    #:witness-items))
 
-(in-package :bp/core/transaction)
+(in-package :bp.core.transaction)
 
 (defstruct tx
   version

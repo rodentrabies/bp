@@ -1,11 +1,11 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/rpc/all (:use :cl)
-  (:nicknames :bprpc)
+(uiop:define-package :bp.rpc (:nicknames :bprpc :bp/rpc/all)
+  (:use :cl)
   (:import-from :aserve)
   (:import-from :jsown)
-  (:use :bp/core/all)
+  (:use :bp.core)
   (:export
    ;; Classes and conditions:
    #:node-connection ;; will be removed soon
@@ -17,7 +17,7 @@
    #:getrawtransaction
    #:getchaintxstats))
 
-(in-package :bp/rpc/all)
+(in-package :bp.rpc)
 
 
 ;;;-----------------------------------------------------------------------------
@@ -150,11 +150,11 @@ RPC server."))
 
 ;;; Redefine BP:NODE-CONNECTION here for backward compatibility.
 ;;; These will be removed in one of the upcoming 0.0.* releases.
-(in-package :bp/core/all)
+(in-package :bp.core)
 
-(defclass node-connection (bprpc:node-rpc-connection) ())
+(defclass node-connection (bp.rpc:node-rpc-connection) ())
 
 (defmethod initialize-instance :after ((object node-connection) &rest args)
   (declare (ignore args))
   (warn "BP:NODE-CONNECTION has been deprecated in favor of ~
-         BPRPC:NODE-RPC-CONNECTION."))
+         BP.RPC:NODE-RPC-CONNECTION."))

@@ -97,9 +97,9 @@ interaction with Bitcoin from REPL. Storage, wallet and full node
 capabilities are somewhere in a distant future.
 
 Note that at this point only the symbols exported from the package
-`bp/core/all` (nicknamed `bp`) can be considered an API - changes to
-these functions and classes will be kept to a minimum. Everything else
-will likely be changing a lot.
+`bp.core` (nicknamed `bp`) can be considered an API - changes to these
+functions and classes will be kept to a minimum. Everything else will
+likely be changing a lot.
 
 
 <a id="chain-interface"></a>
@@ -110,12 +110,12 @@ allow to pull chain data from any external supplier specified with the
 `bp:with-chain-supplier` macro:
 
 ``` lisp
-CL-USER> (bp:with-chain-supplier (bprpc:node-rpc-connection
+CL-USER> (bp:with-chain-supplier (bp.rpc:node-rpc-connection
                                   :url "http://localhost:8332"
                                   :username "btcuser"
                                   :password "btcpassword")
            (bp:get-transaction "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098"))
-#<BP/CORE/TRANSACTION:TX 0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098>
+#<BP.CORE.TRANSACTION:TX 0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098>
 ```
 
 Non-`nil` keyword argument `:encoded` can be used with `bp:get-block`
@@ -156,7 +156,7 @@ any Bitcoin entity from and to any octet stream respectively:
 ``` lisp
 CL-USER> (ironclad:with-octet-input-stream (stream #(1 0 ... 0 0))
            (bp:parse 'bp:tx in-stream))
-#<BP/CORE/TRANSACTION:TX 17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347>
+#<BP.CORE.TRANSACTION:TX 17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347>
 CL-USER> (ironclad:with-octet-output-stream (stream)
            (bp:parse 'tx out-stream))
 #(1 0 ... 0 0)
@@ -171,7 +171,7 @@ and encode Bitcoin entities from and to hex-encoded strings:
 
 ``` lisp
 CL-USER> (bp:decode 'bp:tx "0100000002f8615378...e097a988ac00000000")
-#<BP/CORE/TRANSACTION:TX 17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347>
+#<BP.CORE.TRANSACTION:TX 17e590f116d3deeb9b121bbb1c37b7916e6b7859461a3af7edf74e2348a9b347>
 CL-USER> (bp:encode *)
 "0100000002f8615378...e097a988ac00000000"
 ```
@@ -286,28 +286,28 @@ Executing the following forms from Lisp REPL will perform a handshake
 with Bitcoin node:
 
 ``` lisp
-CL-USER> (defvar *node* (make-instance 'bpnet:simple-node :network :regtest))
+CL-USER> (defvar *node* (make-instance 'bp.net:simple-node :network :regtest))
 ...
-CL-USER> (bpnet:connect-peer *node* :host "127.0.0.1" :port 18444)
+CL-USER> (bp.net:connect-peer *node* :host "127.0.0.1" :port 18444)
 ...
 ```
 
-`bpnet:simple-node` is a very simple network node implementation that
-maintains a single peer connection and provides `bpnet:send-message`
-and `bpnet:receive-message` functions for sending and receiving
+`bp.net:simple-node` is a very simple network node implementation that
+maintains a single peer connection and provides `bp.net:send-message`
+and `bp.net:receive-message` functions for sending and receiving
 messages, respectively.
 
-Alternatively, `bpnet:simple-node` can be asked to discover a peer
+Alternatively, `bp.net:simple-node` can be asked to discover a peer
 using a hardcoded DNS seed, but this is currently only supported on
 mainnet. The following form will select a random peer and shake hands
 with it:
 
 ``` lisp
-CL-USER> (setf *node* (make-instance 'bpnet:simple-node :peer :discover))
+CL-USER> (setf *node* (make-instance 'bp.net:simple-node :peer :discover))
 ...
 ```
 
-Objects of `bpnet:simple-node` partially implement chain supplier
+Objects of `bp.net:simple-node` partially implement chain supplier
 interface - `bp:chain-get-block-hash` is currently not supported,
 `bp:chain-get-transaction` only returns transactions that are
 currently in the mempool or in relay set (this is an [intentional
@@ -327,24 +327,24 @@ CL-USER> (bp:chain-get-block *node* <block-hash>)
 <a id="rpc"></a>
 ## RPC
 
-`bprpc` package provides that `bprpc:node-rpc-connection` class which
-is is an RPC client to the `bitcoind` RPC server. It was mentioned
-above as one of the implementations of the chain supplier interface,
-but it also supports the following RPC operations that correspond to
-the `bitcoind` RPC methods (and `bitcoin-cli` commands) with the same
+`bp.rpc` package provides `bp.rpc:node-rpc-connection` class which is
+an RPC client for the `bitcoind` RPC server. It was mentioned above as
+one of the implementations of the chain supplier interface, but it
+also supports the following RPC operations that correspond to the
+`bitcoind` RPC methods (and `bitcoin-cli` commands) with the same
 name:
 
-- `bprpc:getblockhash`;
-- `bprpc:getblock`;
-- `bprpc:getrawtransaction`;
-- `bprpc:getchaintxstats`.
+- `bp.rpc:getblockhash`;
+- `bp.rpc:getblock`;
+- `bp.rpc:getrawtransaction`;
+- `bp.rpc:getchaintxstats`.
 
 Note that results of RPC operations are `jsown` JSON structures, so
 specific parts of these structures have to be extracted manually:
 
 ``` lisp
-cl-user> (let* ((node-connection (make-instance 'bprpc:node-rpc-connection :url <url>))
-                (chain-stats (bprpc:getchaintxstats node-connection))
+cl-user> (let* ((node-connection (make-instance 'bp.rpc:node-rpc-connection :url <url>))
+                (chain-stats (bp.rpc:getchaintxstats node-connection))
                 (chain-blocks (jsown:val chain-stats "window_final_block_height"))
                 (chain-txs (jsown:val chain-stats "txcount")))
            (format t "Blocks: ~a, transactions: ~a~%" chain-blocks chain-txs))

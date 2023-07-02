@@ -1,13 +1,14 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/tests/transaction (:use :cl :fiveam)
-  (:use :bp/core/all
-        :bp/tests/data)
-  (:import-from :bp/core/block
+(uiop:define-package :bp.tests.transaction
+  (:use :cl :fiveam)
+  (:use :bp.core
+        :bp.tests.data)
+  (:import-from :bp.core.block
                 #:block-header-version))
 
-(in-package :bp/tests/transaction)
+(in-package :bp.tests.transaction)
 
 (def-suite transaction-tests
     :description "Tests for transaction parsing, serialization and

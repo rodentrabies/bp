@@ -1,12 +1,13 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/net/node (:use :cl)
-  (:use :bp/core/all
-        :bp/crypto/all
-        :bp/net/parameters
-        :bp/net/address
-        :bp/net/message)
+(uiop:define-package :bp.net.node (:nicknames :bp/net/node)
+  (:use :cl)
+  (:use :bp.core
+        :bp.crypto
+        :bp.net.parameters
+        :bp.net.address
+        :bp.net.message)
   (:import-from :ironclad)
   (:import-from :usocket)
   (:export
@@ -24,7 +25,7 @@
    #:node-host
    #:node-port))
 
-(in-package :bp/net/node)
+(in-package :bp.net.node)
 
 
 ;;;-----------------------------------------------------------------------------
