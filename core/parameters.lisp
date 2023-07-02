@@ -1,7 +1,8 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/parameters (:use :cl)
+(uiop:define-package :bp.core.parameters (:nicknames :bp/core/parameters)
+  (:use :cl)
   (:export
    ;; Constants:
    #:+initial-block-reward+
@@ -15,7 +16,7 @@
    ;; BP-specific parameters:
    #:*bp-version*))
 
-(in-package :bp/core/parameters)
+(in-package :bp.core.parameters)
 
 
 

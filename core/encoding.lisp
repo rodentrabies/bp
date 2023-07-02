@@ -1,8 +1,9 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/encoding (:use :cl :ironclad)
-  (:use :bp/crypto/hash)
+(uiop:define-package :bp.core.encoding (:nicknames :bp/core/encoding)
+  (:use :cl :ironclad)
+  (:use :bp.crypto.hash)
   (:export
    ;; Serialization API:
    #:serialize
@@ -42,7 +43,7 @@
    #:bech32-mixed-case-characters-error
    #:bech32-no-separator-character-error))
 
-(in-package :bp/core/encoding)
+(in-package :bp.core.encoding)
 
 
 ;;;-----------------------------------------------------------------------------

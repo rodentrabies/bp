@@ -1,12 +1,13 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/script (:use :cl)
+(uiop:define-package :bp.core.script (:nicknames :bp/core/script)
+  (:use :cl)
   (:use
-   :bp/core/encoding
-   :bp/core/parameters
-   :bp/crypto/hash
-   :bp/crypto/secp256k1)
+   :bp.core.encoding
+   :bp.core.parameters
+   :bp.crypto.hash
+   :bp.crypto.secp256k1)
   (:export
    #:script
    #:decode-integer
@@ -20,7 +21,7 @@
    ;; #:*print-script-as-assembly* ;; not exported yet
    #:*trace-script-execution*))
 
-(in-package :bp/core/script)
+(in-package :bp.core.script)
 
 
 ;;;-----------------------------------------------------------------------------

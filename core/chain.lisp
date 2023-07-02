@@ -1,10 +1,11 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/core/chain (:use :cl)
-  (:use :bp/core/block
-        :bp/core/transaction
-        :bp/core/encoding)
+(uiop:define-package :bp.core.chain (:nicknames :bp/core/chain)
+  (:use :cl)
+  (:use :bp.core.block
+        :bp.core.transaction
+        :bp.core.encoding)
   (:export
    ;; Chain supplier API:
    #:*chain-supplier*
@@ -30,7 +31,7 @@
    #:unknown-transaction-error
    #:unknown-transaction-id))
 
-(in-package :bp/core/chain)
+(in-package :bp.core.chain)
 
 
 ;;;-----------------------------------------------------------------------------

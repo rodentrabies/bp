@@ -1,11 +1,12 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/tests/block (:use :cl :fiveam)
-  (:use :bp/core/all
-        :bp/tests/data))
+(uiop:define-package :bp.tests.block
+  (:use :cl :fiveam)
+  (:use :bp.core
+        :bp.tests.data))
 
-(in-package :bp/tests/block)
+(in-package :bp.tests.block)
 
 (def-suite block-tests
     :description "Tests for block parsing, serialization and

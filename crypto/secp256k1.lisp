@@ -1,9 +1,9 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/crypto/secp256k1 (:use :cl :cffi :ironclad)
-  (:use :bp/crypto/random)
-  (:nicknames :secp256k1)
+(uiop:define-package :bp.crypto.secp256k1 (:nicknames :secp256k1 :bp/crypto/secp256k1)
+  (:use :cl :cffi :ironclad)
+  (:use :bp.crypto.random)
   (:shadow
    ;; Ironclad's symbols
    #:make-signature
@@ -39,7 +39,7 @@
    #:parse-signature
    #:serialize-signature))
 
-(in-package :bp/crypto/secp256k1)
+(in-package :bp.crypto.secp256k1)
 
 ;;;-----------------------------------------------------------------------------
 ;;; libsecp256k1

@@ -1,10 +1,11 @@
 ;;; Copyright (c) 2019-2023 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
-(uiop:define-package :bp/tests/encoding (:use :cl :fiveam)
-  (:use :bp/core/all))
+(uiop:define-package :bp.tests.encoding
+  (:use :cl :fiveam)
+  (:use :bp.core))
 
-(in-package :bp/tests/encoding)
+(in-package :bp.tests.encoding)
 
 (def-suite encoding-tests
   :description "Tests for various encoding formats used by Bitcoin
@@ -73,7 +74,7 @@ isomorphism."
     (values bytes hrp encoding)))
 
 (defun segwit-version-opcode (number)
-  ;; TODO: maybe make this a more general utility in BP/CORE/SCRIPT.
+  ;; TODO: maybe make this a more general utility in BP.CORE.SCRIPT.
   (if (<= 0 number 16)
       (intern (format nil "~a_~a" 'op number) :keyword)
       (error "Segwit version must be in between 0 and 16.")))
