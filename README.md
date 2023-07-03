@@ -35,13 +35,15 @@ CASES.**
 <a id="table-of-contents"></a>
 ## Table of Contents
 - [Installation](#installation)
-- [Core](#interface)
+- [Package structure](#package-structure)
+- [`bp`, `bp.core` - core datastructures and consensus](#core)
   - [Chain interface](#chain-interface)
   - [Model](#model)
   - [Serialization](#serialization)
   - [Validation](#validation)
-- [Network](#network)
-- [RPC](#rpc)
+- [Subsystems](#subsystems)
+  - [`bp.net` - peer-to-peer network](#network)
+  - [`bp.rpc` - RPC node connection](#rpc)
 - [Examples](#examples)
 - [API changes](#api-changes)
 - [License](#license)
@@ -89,17 +91,45 @@ CL-USER> (asdf:load-system "bp")
 ```
 
 
+
+<a id="package-structure"></a>
+## Package structure
+
+`bp` codebase utilises ASDF's `package-inferred-system` extension,
+which means that every file is a separate package whose name matches
+the filesystem path of that file relative to the root directory,
+e.g. `core/block.lisp` file corresponds to `bp.core.block` package.
+
+Files called `all.lisp` contain interface packages that reexport all
+API components of their "subpackages" - packages on the same project
+hierarchy level. An interface package defined in a file
+`<component>/all.lisp` has a name `bp.<component>`. For example,
+interface package defined in `crypto/all.lisp` file is called
+`bp.crypto`.
+
+Below is a table that lists the top-level components of the `bp`
+system:
+
+| Interface package | Implementation packages                                                                                                                                                                   | Corresponding ASDF system                                                                                                                                                                     | Description                                                        |
+|-------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------|
+| `bp`, `bp.core`   | `bp.core`<br>`bp.core.parameters`<br>`bp.core.chain`<br>`bp.core.block`<br>`bp.core.transaction`<br>`bp.core.script`<br>`bp.core.encoding`<br>`bp.core.consensus`<br>`bp.core.merkletree` | `bp/core/all`<br>`bp/core/parameters`<br>`bp/core/chain`<br>`bp/core/block`<br>`bp/core/transaction`<br>`bp/core/script`<br>`bp/core/encoding`<br>`bp/core/consensus`<br>`bp/core/merkletree` | Bitcoin chain data,<br>consensus, serialization,<br>core utilities |
+| `bp.crypto`       | `bp.crypto`<br>`bp.crypto.secp256k1`<br>`bp.crypto.hash`<br>`bp.crypto.random`                                                                                                            | `bp/crypto/all`<br>`bp/crypto/secp256k1`<br>`bp/crypto/hash`<br>`bp/crypto/random`                                                                                                            | Cryptographic tools                                                |
+| `bp.net`          | `bp.net`<br>`bp.net.address`<br>`bp.net.message`<br>`bp.net.node`<br>`bp.net.parameters`                                                                                                  | `bp/net/all`<br>`bp/net/address`<br>`bp/net/message`<br>`bp/net/node`<br>`bp/net/parameters`                                                                                                  | Peer-to-peer network                                               |
+| `bp.rpc`          | `bp.rpc`                                                                                                                                                                                  | `bp/rpc/all`                                                                                                                                                                                  | RPC interface to <br> Bitcoin node                                 |
+
+It is **strongly advised** to avoid using packages in the second
+column directly, as these might change in the future. At this point
+only the interface packages (first column) and the symbols exported
+from them can be considered an API.
+
+
+
 <a id="core"></a>
-## Core
+## `bp`, `bp.core` - core datastructures and consensus
 
-Currently this library only provides utilities for stateless
-interaction with Bitcoin from REPL. Storage, wallet and full node
-capabilities are somewhere in a distant future.
-
-Note that at this point only the symbols exported from the package
-`bp.core` (nicknamed `bp`) can be considered an API - changes to these
-functions and classes will be kept to a minimum. Everything else will
-likely be changing a lot.
+Currently this library only provides utilities for simple interaction
+with Bitcoin network and/or Bitcoin Core node. Storage, wallet and
+full node capabilities are somewhere in a distant future.
 
 
 <a id="chain-interface"></a>
@@ -257,10 +287,18 @@ T
 ```
 
 
-<a id="network"></a>
-## Network
 
-**BP** provides simple utilities for interacting with Bitcoin
+<a id="subsystems"></a>
+## Subsystems
+
+Below is the list of `bp` subsystems that are intended to be more or
+less self-contained and suitable for use in other software separately
+from the rest of the `bp` system.
+
+<a id="network"></a>
+### `bp.net` - peer-to-peer network
+
+`bp.net` package provides simple utilities for interacting with Bitcoin
 network - a subset of network messages and functions for establishing
 connections with other network nodes as well as requesting blocks and
 transactions.
@@ -325,7 +363,7 @@ CL-USER> (bp:chain-get-block *node* <block-hash>)
 
 
 <a id="rpc"></a>
-## RPC
+### `bp.rpc` - RPC node connection
 
 `bp.rpc` package provides `bp.rpc:node-rpc-connection` class which is
 an RPC client for the `bitcoind` RPC server. It was mentioned above as
