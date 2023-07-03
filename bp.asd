@@ -3,7 +3,7 @@
 
 (defsystem "bp"
     :description "Bitcoin Protocol components in Common Lisp"
-  :version "0.0.4"
+  :version "0.0.5"
   :author "rodentrabies <rodentrabies@protonmail.com>"
   :license "MIT"
   :class :package-inferred-system
