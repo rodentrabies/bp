@@ -1458,6 +1458,14 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (pubkey  (:pointer (:struct secp256k1-xonly-pubkey)))
   (input32 (:pointer :unsigned-char)))
 
+(defun xonly-pubkey-parse (input)
+  (with-foreign-objects
+      ((cxpubkey '(:struct secp256k1-xonly-pubkey))
+       (cinput32 :unsigned-char 32))
+    (bytes-to-foreign input cinput32 32)
+    (unless (zerop (secp256k1-xonly-pubkey-parse *secp256k1-context* cxpubkey cinput32))
+      (bytes-from-foreign nil cxpubkey 64))))
+
 ;; Serialize an xonly_pubkey object into a 32-byte sequence.
 ;;
 ;; Returns: 1 always.
@@ -1470,6 +1478,14 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ctx      (:pointer (:struct secp256k1-context)))
   (output32 (:pointer :unsigned-char))
   (pubkey   (:pointer (:struct secp256k1-xonly-pubkey))))
+
+(defun xonly-pubkey-serialize (pubkey)
+  (with-foreign-objects
+      ((coutput32 :unsigned-char 32)
+       (cxpubkey '(:struct secp256k1-xonly-pubkey)))
+    (bytes-to-foreign pubkey cxpubkey 64)
+    (secp256k1-xonly-pubkey-serialize *secp256k1-context* coutput32 cxpubkey)
+    (bytes-from-foreign nil coutput32 32)))
 
 ;; Compare two x-only public keys using lexicographic order
 ;;
@@ -1822,10 +1838,14 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (%make-pubkey :bytes (ec-pubkey-create (key-bytes key))))
 
 (defun parse-pubkey (bytes)
-  (%make-pubkey :bytes (ec-pubkey-parse bytes)))
+  (if (= (length bytes) 32)
+      (%make-pubkey :bytes (xonly-pubkey-parse bytes))
+      (%make-pubkey :bytes (ec-pubkey-parse bytes))))
 
 (defun serialize-pubkey (pubkey &key compressed)
-  (ec-pubkey-serialize (pubkey-bytes pubkey) :compressed compressed))
+  (if (eq compressed :xonly)
+      (xonly-pubkey-serialize (pubkey-bytes pubkey))
+      (ec-pubkey-serialize (pubkey-bytes pubkey) :compressed compressed)))
 
 (defun parse-signature (bytes &key (type :relaxed))
   (let* ((bytes (ecase type
