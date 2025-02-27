@@ -1,15 +1,16 @@
-;;; Copyright (c) 2019-2023 BP Developers & Contributors
+;;; Copyright (c) 2019-2025 BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
 (uiop:define-package :bp.core.encoding (:nicknames :bp/core/encoding)
-  (:use :cl :ironclad)
+  (:use :cl)
   (:use :bp.crypto.hash)
+  (:import-from :ironclad)
   (:export
-   ;; Serialization API:
-   #:serialize
-   #:parse
-   #:encode
-   #:decode
+   ;; Ironclad wrappers:
+   #:with-output-to-byte-array
+   #:with-input-from-byte-array
+   #:byte-array-to-integer
+   #:integer-to-byte-array
    ;; Utilities:
    #:read-bytes
    #:write-bytes
@@ -18,13 +19,17 @@
    #:read-varint
    #:write-varint
    #:make-byte-array
-   ;; Encoding
-   ;; Generic:
+   ;; Serialization API:
+   #:serialize
+   #:parse
+   #:encode
+   #:decode
+   ;; Generic encoding utilities:
    #:checksum-error
-   ;; HEX
+   ;; HEX encoding:
    #:hex-encode
    #:hex-decode
-   ;; BASE58/BASE58CHECK
+   ;; BASE58/BASE58CHECK encoding:
    #:base58-encode
    #:base58-decode
    #:base58check-encode
@@ -32,7 +37,7 @@
    #:base58check-checksum-error
    #:base58check-bad-checksum-error
    #:base58check-no-checksum-error
-   ;; BECH32/BECH32M
+   ;; BECH32/BECH32M encoding:
    #:bech32-encode
    #:bech32-decode
    #:bech32-checksum-error
@@ -46,27 +51,37 @@
 (in-package :bp.core.encoding)
 
 
-;;;-----------------------------------------------------------------------------
-;;; Entity encoding/decoding API
+;;; ----------------------------------------------------------------------------
+;;; Wrappers around Ironclad's utilities. All Ironclad dependencies
+;;; should be limited to here and bp.crypto package.
 
-(defgeneric serialize (entity stream)
-  (:documentation "Serialize ENTITY into the stream."))
+;;; TODO: maybe these should be moved to a dedicated place (like
+;;;       bp.crypto.bytes package).
 
-(defgeneric parse (entity-class stream)
-  (:documentation "Parse bytes from the STREAM into an instance
-  of the class named ENTITY-CLASS."))
+(defmacro with-output-to-byte-array ((var) &body body)
+  `(ironclad:with-octet-output-stream (,var) ,@body))
 
-(defun encode (entity)
-  "Encode Bitcoin Protocol ENTITY into a hex string."
-  (hex-encode
-   (ironclad:with-octet-output-stream (stream)
-     (serialize entity stream))))
+(defmacro with-input-from-byte-array ((var bytes &optional (start 0) end) &body body)
+  `(ironclad:with-octet-input-stream (,var ,bytes ,start ,end) ,@body))
 
-(defun decode (entity-class string)
-  "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS
-from hex STRING."
-  (ironclad:with-octet-input-stream (stream (hex-decode string))
-    (parse entity-class stream)))
+(defun byte-array-to-integer (bytes &key (start 0) end (big-endian t) n-bits)
+  (ironclad:octets-to-integer
+   bytes
+   :start start
+   :end end
+   :n-bits n-bits
+   :big-endian big-endian))
+
+(defun integer-to-byte-array (integer &key n-bits (big-endian t))
+  (ironclad:integer-to-octets
+   integer
+   :n-bits n-bits
+   :big-endian big-endian))
+
+(defun ascii-string-to-byte-array (string &key (start 0) end)
+  ;; TODO: this is only used in bp.net.message; do we really need it?
+  ;;       I'm leaving it non-exported for now.
+  (ironclad:ascii-string-to-byte-array string :start start :end end))
 
 
 ;;;-----------------------------------------------------------------------------
@@ -87,7 +102,7 @@ from hex STRING."
            (:little nil)))
         (bytes
          (read-bytes stream size)))
-    (ironclad:octets-to-integer bytes :n-bits (* 8 size) :big-endian big-endian-p)))
+    (byte-array-to-integer bytes :n-bits (* 8 size) :big-endian big-endian-p)))
 
 (defun write-int (i stream &key size byte-order)
   (let* ((big-endian-p
@@ -95,7 +110,7 @@ from hex STRING."
             (:big    t)
             (:little nil)))
          (bytes
-          (ironclad:integer-to-octets i :n-bits (* 8 size) :big-endian big-endian-p)))
+          (integer-to-byte-array i :n-bits (* 8 size) :big-endian big-endian-p)))
     (write-bytes bytes stream size)))
 
 (defun read-varint (stream)
@@ -135,6 +150,29 @@ from hex STRING."
 
 (defun make-displaced-byte-array (bytes)
   (make-array (length bytes) :element-type '(unsigned-byte 8) :displaced-to bytes))
+
+
+;;;-----------------------------------------------------------------------------
+;;; Entity encoding/decoding API
+
+(defgeneric serialize (entity stream)
+  (:documentation "Serialize ENTITY into the stream."))
+
+(defgeneric parse (entity-class stream)
+  (:documentation "Parse bytes from the STREAM into an instance
+  of the class named ENTITY-CLASS."))
+
+(defun encode (entity)
+  "Encode Bitcoin Protocol ENTITY into a hex string."
+  (hex-encode
+   (with-output-to-byte-array (stream)
+     (serialize entity stream))))
+
+(defun decode (entity-class string)
+  "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS
+from hex STRING."
+  (with-input-from-byte-array (stream (hex-decode string))
+    (parse entity-class stream)))
 
 
 ;;;-----------------------------------------------------------------------------
@@ -178,11 +216,9 @@ respective."
 ;; (define-alphabet hex "0123456789abcdef" :case-insensitive t)
 
 (defun hex-encode (bytes)
-  "Shortcut to avoid using long symbol IRONCLAD:BYTE-ARRAY-TO-HEX-STRING."
   (ironclad:byte-array-to-hex-string (make-byte-array (length bytes) bytes)))
 
 (defun hex-decode (string)
-  "Shortcut to avoid using long symbol IRONCLAD:HEX-STRING-TO-BYTE-ARRAY."
   (ironclad:hex-string-to-byte-array string))
 
 ;;; BASE58CHECK

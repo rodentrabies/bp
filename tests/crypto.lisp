@@ -3,7 +3,7 @@
 
 (uiop:define-package :bp.tests.crypto
   (:use :cl :fiveam)
-  (:use :bp.crypto))
+  (:use :bp.core :bp.crypto))
 
 (in-package :bp.tests.crypto)
 
@@ -15,9 +15,9 @@
 (defun scale-key (scalar seckey)
   (bp.crypto.secp256k1::%make-key
    :bytes
-   (ironclad:integer-to-octets
+   (integer-to-byte-array
     (mod
-     (* scalar (ironclad:octets-to-integer (bp.crypto.secp256k1::key-bytes seckey)))
+     (* scalar (byte-array-to-integer (bp.crypto.secp256k1::key-bytes seckey)))
      #xfffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141)
     :n-bits #.(* 8 32))))
 

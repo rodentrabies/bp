@@ -2,12 +2,8 @@
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
 (uiop:define-package :bp.crypto.secp256k1 (:nicknames :secp256k1 :bp/crypto/secp256k1)
-  (:use :cl :cffi :ironclad)
+  (:use :cl :cffi)
   (:use :bp.crypto.random)
-  (:shadow
-   ;; Ironclad's symbols
-   #:make-signature
-   #:verify-signature)
   (:export
    ;; Signature API
    #:ecdsa-sign

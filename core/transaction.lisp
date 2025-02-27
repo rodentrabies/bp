@@ -125,7 +125,7 @@ otherwise."
 (defun tx-hash (tx)
   "Raw transaction ID is a double SHA256 of its binary serialization."
   (hash256
-   (ironclad:with-octet-output-stream (stream)
+   (with-output-to-byte-array (stream)
      (serialize tx stream))))
 
 (defun tx-id (tx)

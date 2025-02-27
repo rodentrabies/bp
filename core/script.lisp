@@ -165,7 +165,7 @@ otherwise."
 
 (defmethod serialize ((script script) stream)
   (let* ((script-bytes
-           (ironclad:with-octet-output-stream (script-stream)
+           (with-output-to-byte-array (script-stream)
              (loop
                :for command :across (script-commands script)
                :for opcode := (command-opcode command)
@@ -191,7 +191,7 @@ otherwise."
   (let* ((script-len (read-varint stream))
          (script-bytes (read-bytes stream script-len))
          (commands (list)))
-    (ironclad:with-octet-input-stream (script-stream script-bytes)
+    (with-input-from-byte-array (script-stream script-bytes)
       (loop
         :with i := 0 :while (< i script-len)
         :for opcode := (read-byte script-stream)
@@ -217,7 +217,7 @@ otherwise."
                               (min expected-payload-size (- script-len i 1 payload-length-size)))
                             (payload (read-bytes script-stream payload-size))
                             (length
-                              (ironclad:integer-to-octets
+                              (integer-to-byte-array
                                payload-size :n-bits (* 8 payload-length-size) :big-endian nil)))
                        (push (make-command opcode :payload payload :payload-length length) commands)
                        (incf i payload-size)))
@@ -568,11 +568,11 @@ value will write the trace to that stream).")
     ;; Hash matches, so add redeem script to the command set.
     (let* ((redeem-script-length (length redeem-data))
            (redeem-script-bytes
-            (ironclad:with-octet-output-stream (stream)
+            (with-output-to-byte-array (stream)
               (write-varint redeem-script-length stream)
               (write-bytes redeem-data stream redeem-script-length))))
       ;; Parse and execute the redeem-script.
-      (ironclad:with-octet-input-stream (stream redeem-script-bytes)
+      (with-input-from-byte-array (stream redeem-script-bytes)
         (let ((redeem-script (parse 'script stream)))
           ;; Override the sigversion set in EXECUTE-SCRIPTS.
           (setf (@sigversion state) (script-sigversion redeem-script))
@@ -609,14 +609,14 @@ value will write the trace to that stream).")
     (let* ((witness-script-data (aref witness (- witness-length 1)))
            (witness-script-length (length witness-script-data))
            (witness-script-bytes
-            (ironclad:with-octet-output-stream (stream)
+            (with-output-to-byte-array (stream)
               (write-varint witness-script-length stream)
               (write-bytes witness-script-data stream witness-script-length)))
            (witness-program
             (command-payload (aref (script-commands script-pubkey) 1))))
       (when (not (equalp (sha256 witness-script-data) witness-program))
         (error "P2WSH error: hash mismatch."))
-      (ironclad:with-octet-input-stream (stream witness-script-bytes)
+      (with-input-from-byte-array (stream witness-script-bytes)
         (execute-script (parse 'script stream) :state state)))))
 
 (defun script-sigversion (script)

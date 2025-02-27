@@ -8,7 +8,6 @@
         :bp.net.parameters
         :bp.net.address
         :bp.net.message)
-  (:import-from :ironclad)
   (:import-from :usocket)
   (:export
    ;; Node API:
@@ -64,9 +63,9 @@
                   (:testnet +testnet-network-magic+)
                   (:regtest +regtest-network-magic+)))
          (payload-bytes
-          (ironclad:with-octet-output-stream (stream) (serialize message stream)))
+          (with-output-to-byte-array (stream) (serialize message stream)))
          (checksum
-          (ironclad:octets-to-integer (subseq (hash256 payload-bytes) 0 4) :big-endian nil))
+          (byte-array-to-integer (subseq (hash256 payload-bytes) 0 4) :big-endian nil))
          (packet
           (make-packet
            :magic magic
@@ -86,7 +85,7 @@
             (:regtest +regtest-network-magic+)))
          (payload (packet-payload packet))
          (checksum
-          (ironclad:with-octet-input-stream (stream (sha256 payload))
+          (with-input-from-byte-array (stream (sha256 payload))
             (read-int stream :size 4 :byte-order :little)))
          (expected-checksum (packet-checksum packet)))
     (assert (= (packet-magic packet) expected-magic)
@@ -97,7 +96,7 @@
             (checksum expected-checksum)
             "Packet checksum mismatch: ~x (expected ~x)."
             checksum expected-checksum)
-    (ironclad:with-octet-input-stream (stream payload)
+    (with-input-from-byte-array (stream payload)
       (parse (message-type-from-command (packet-command packet)) stream))))
 
 (defun perform-handshake (node peer)

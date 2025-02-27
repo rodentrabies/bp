@@ -30,7 +30,7 @@ level until it has length 1. Return a resulting root node."
                  (right-hash (merkle-tree-node-hash right)))
              (make-merkle-tree-node
               :hash (hash256
-                     (ironclad:with-octet-output-stream (stream)
+                     (with-output-to-byte-array (stream)
                        (write-bytes left-hash  stream (length left-hash))
                        (write-bytes right-hash stream (length right-hash))))
               :left left

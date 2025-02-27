@@ -89,9 +89,9 @@ extend it with additional data if supplied."
 ;;; Blocks
 
 (defun bits-to-target (bits)
-  (let* ((f (ironclad:octets-to-integer bits :start 1))
+  (let* ((f (byte-array-to-integer bits :start 1))
          (e (aref bits 0)))
-    (ironclad:integer-to-octets
+    (integer-to-byte-array
      (* f (expt 2 (* 8 (- e 3))))
      :n-bits 256
      :big-endian nil)))
@@ -103,14 +103,14 @@ extend it with additional data if supplied."
   (let ((current-target (bits-to-target (block-bits block)))
         (max-target (bits-to-target (make-byte-array 4 #(#x1d #x00 #xff #xff)))))
     (float
-     (/ (ironclad:octets-to-integer max-target :big-endian nil)
-        (ironclad:octets-to-integer current-target :big-endian nil)))))
+     (/ (byte-array-to-integer max-target :big-endian nil)
+        (byte-array-to-integer current-target :big-endian nil)))))
 
 (defmethod validate ((block-header block-header) &key context)
   (declare (ignore context))
-  (unless (< (ironclad:octets-to-integer
+  (unless (< (byte-array-to-integer
               (block-hash block-header) :big-endian nil)
-             (ironclad:octets-to-integer
+             (byte-array-to-integer
               (block-target block-header) :big-endian nil))
     (error "Block hash does not satisfy Proof-of-Work target."))
   t)
@@ -184,14 +184,14 @@ extend it with additional data if supplied."
       (setf (tx-inputs tx)
             (make-array 1 :element-type 'txin :initial-element txin)))
     (hash256
-     (ironclad:with-octet-output-stream (stream)
+     (with-output-to-byte-array (stream)
        (serialize tx stream)
        (write-int sighash-type stream :size 4 :byte-order :little)))))
 
 (defun tx-previous-outputs-hash (tx sighash-type)
   (if (zerop (logand sighash-type +sighash-anyonecanpay+))
       (hash256
-       (ironclad:with-octet-output-stream (stream)
+       (with-output-to-byte-array (stream)
          (loop
             :for txin :across (tx-inputs tx)
             :for prev-id := (txin-previous-tx-id txin)
@@ -206,7 +206,7 @@ extend it with additional data if supplied."
            (/= (logand sighash-type #x1f) +sighash-single+)
            (/= (logand sighash-type #x1f) +sighash-none+))
       (hash256
-       (ironclad:with-octet-output-stream (stream)
+       (with-output-to-byte-array (stream)
          (loop
             :for txin :across (tx-inputs tx)
             :for sequence := (txin-sequence txin)
@@ -218,14 +218,14 @@ extend it with additional data if supplied."
     ((and (/= (logand sighash-type #x1f) +sighash-single+)
           (/= (logand sighash-type #x1f) +sighash-none+))
      (hash256
-      (ironclad:with-octet-output-stream (stream)
+      (with-output-to-byte-array (stream)
         (loop
            :for txout :across (tx-outputs tx)
            :do (serialize txout stream)))))
     ((and (= (logand sighash-type #x1f) +sighash-single+)
           (< txin-index (length (tx-outputs tx))))
      (hash256
-      (ironclad:with-octet-output-stream (stream)
+      (with-output-to-byte-array (stream)
         (serialize (tx-output tx txin-index) stream))))
     (t
      (make-byte-array 32))))
@@ -238,7 +238,7 @@ spec at https://github.com/bitcoin/bips/blob/master/bip-0143.mediawiki)."
         (outputs-hash          (tx-outputs-hash tx txin-index sighash-type))
         (txin                  (tx-input tx txin-index)))
     (hash256
-     (ironclad:with-octet-output-stream (stream)
+     (with-output-to-byte-array (stream)
        (write-int (tx-version tx) stream :size 4 :byte-order :little)
        (write-bytes previous-outputs-hash stream 32)
        (write-bytes sequence-hash stream 32)

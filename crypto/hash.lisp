@@ -2,7 +2,8 @@
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
 (uiop:define-package :bp.crypto.hash (:nicknames :bp/crypto/hash)
-  (:use :cl :ironclad)
+  (:use :cl)
+  (:import-from :ironclad)
   (:export
    #:sha1
    #:ripemd160

@@ -5,7 +5,10 @@
   (:use :cl)
   (:use :bp.core
         :bp.net.address)
-  (:import-from :ironclad)
+  ;; TODO: this symbol was left non-exported intentionally; remove
+  ;;       when no longer relevant.
+  (:import-from :bp.core.encoding
+                #:ascii-string-to-byte-array)
   (:import-from :usocket)
   ;; Messages and their field accessors are automatically exported by
   ;; the DEFMESSAGE macro. Non-message structures and other utils are
@@ -51,7 +54,7 @@
 
 (defun command-to-bytes (command)
   (let ((bytes (make-byte-array 12))
-        (command-bytes (ironclad:ascii-string-to-byte-array command)))
+        (command-bytes (ascii-string-to-byte-array command)))
     (loop :for i :below (length command-bytes) :do (setf (aref bytes i) (aref command-bytes i)))
     bytes))
 
@@ -223,7 +226,7 @@ message. See BIP-0152 for more info.")
          (sender-address (version-message-sender-address message))
          (nonce (version-message-nonce message))
          (user-agent (version-message-user-agent message))
-         (user-agent-bytes (ironclad:ascii-string-to-byte-array user-agent))
+         (user-agent-bytes (ascii-string-to-byte-array user-agent))
          (user-agent-length (length user-agent-bytes))
          (height (version-message-height message))
          (relayp (version-message-relayp message)))

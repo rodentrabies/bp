@@ -113,7 +113,7 @@
 
 (defmethod block-hash ((block-header block-header))
   (hash256
-   (ironclad:with-octet-output-stream (stream)
+   (with-output-to-byte-array (stream)
      (serialize block-header stream))))
 
 
