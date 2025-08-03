@@ -1,4 +1,7 @@
-# BP - Bitcoin Protocol
+<!--
+Copyright (c) 2019-2025 BP Developers & Contributors
+See the accompanying file LICENSE for the full license governing this code.
+-->
 
 [asdf-registry]: https://common-lisp.net/project/asdf/asdf/Configuring-ASDF-to-find-your-systems.html
 [asdf]: https://gitlab.common-lisp.net/asdf/asdf
@@ -13,12 +16,25 @@
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [usocket]: https://github.com/usocket/usocket
 
+
+<!-- README.md starts with a logo. -->
+<p align="center">
+  <img src="docs/bp.svg" width="70%" alt="(bp) logo">
+</p>
+
+
+<div align="center">
+
+# (bp) - Bitcoin Protocol (in Lisp)
+
+</div>
+
 [![Quicklisp](http://quickdocs.org/badge/bp.svg)](https://quickref.common-lisp.net/bp.html)
 [![Build Status](https://travis-ci.com/rodentrabies/bp.svg?branch=master)](https://travis-ci.com/rodentrabies/bp)
 
-This is a Common Lisp implementation of the various components of the
-Bitcoin Protocol. The serialization and deserialization utils may be
-used for reading the block data both from peers and from local
+**(bp)** is a Common Lisp implementation of the various components of
+the Bitcoin Protocol. The serialization and deserialization utils may
+be used for reading the block data both from peers and from local
 database on disk. EC-based cryptographic operations are implemented as
 FFI bindings to the [secp256k1] using [cffi], while hash-functions are
 taken from [ironclad]. Low-level networking is implemented using
@@ -406,6 +422,6 @@ See [CHANGELOG.md](CHANGELOG.md).
 
 Copyright (c) 2019-2021 whythat \<whythat@protonmail.com\>\
 Copyright (c) 2021-2023 rodentrabies \<rodentrabies@protonmail.com\>\
-Copyright (c) 2019-2023 BP Developers & Contributors
+Copyright (c) 2019-2025 BP Developers & Contributors
 
 Licensed under MIT License. See [LICENSE](LICENSE).
