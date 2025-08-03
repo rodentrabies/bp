@@ -29,8 +29,13 @@ See the accompanying file LICENSE for the full license governing this code.
 
 </div>
 
+<!--
+Quicklisp and Build Status badges are hidden for now because they
+are both broken.
+
 [![Quicklisp](http://quickdocs.org/badge/bp.svg)](https://quickref.common-lisp.net/bp.html)
 [![Build Status](https://travis-ci.com/rodentrabies/bp.svg?branch=master)](https://travis-ci.com/rodentrabies/bp)
+-->
 
 **(bp)** is a Common Lisp implementation of the various components of
 the Bitcoin Protocol. The serialization and deserialization utils may
