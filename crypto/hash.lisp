@@ -14,11 +14,21 @@
 (in-package :bp.crypto.hash)
 
 (defun sha1 (bytes)
+  #+allegro
+  (let ((digest (excl:sha1-init)))
+    (excl:sha1-update digest bytes)
+    (excl:sha1-final digest :return :usb8))
+  #-allegro
   (let ((digester (ironclad:make-digest 'ironclad:sha1)))
     (ironclad:update-digest digester bytes)
     (ironclad:produce-digest digester)))
 
 (defun sha256 (bytes)
+  #+allegro
+  (let ((digest (excl:sha256-init)))
+    (excl:sha256-update digest bytes)
+    (excl:sha256-final digest :return :usb8))
+  #-allegro
   (let ((digester (ironclad:make-digest 'ironclad:sha256)))
     (ironclad:update-digest digester bytes)
     (ironclad:produce-digest digester)))

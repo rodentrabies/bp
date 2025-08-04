@@ -59,9 +59,15 @@
 ;;;       bp.crypto.bytes package).
 
 (defmacro with-output-to-byte-array ((var) &body body)
+  #+allegro
+  `(excl:with-output-to-buffer (,var) ,@body)
+  #-allegro
   `(ironclad:with-octet-output-stream (,var) ,@body))
 
 (defmacro with-input-from-byte-array ((var bytes &optional (start 0) end) &body body)
+  #+allegro
+  `(excl:with-input-from-buffer (,var ,bytes :start ,start :end ,end) ,@body)
+  #-allegro
   `(ironclad:with-octet-input-stream (,var ,bytes ,start ,end) ,@body))
 
 (defun byte-array-to-integer (bytes &key (start 0) end (big-endian t) n-bits)
