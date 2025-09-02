@@ -1,0 +1,31 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    name: ${{ matrix.lisp }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        lisp: [sbcl-bin]
+        os: [ubuntu-latest]
+      fail-fast: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install external dependencies
+        run: sudo apt-get install -y libsecp256k1-dev
+      - name: Install Roswell
+        env:
+          LISP: ${{ matrix.lisp }}
+        run: |
+          curl -L https://raw.githubusercontent.com/roswell/roswell/master/scripts/install-for-ci.sh | sh -x
+      - name: Run tests
+        env:
+          LISP: ${{ matrix.lisp }}
+        run: |
+          ros -e '(ql:quickload :bp/tests)' \
+              -e '(setf fiveam:*on-error* :debug)' \
+              -e '(setf fiveam:*on-failure* :debug)' \
+              -e '(setf *debugger-hook* (lambda (c h) (declare (ignore c h)) (uiop:quit -1)))' \
+              -e '(asdf:test-system "bp")'
