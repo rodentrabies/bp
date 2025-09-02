@@ -16,6 +16,9 @@ See the accompanying file LICENSE for the full license governing this code.
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [usocket]: https://github.com/usocket/usocket
 
+[ci-status]: https://github.com/rodentrabies/bp/actions/workflows/ci.yml
+[ci-status-badge]: https://github.com/rodentrabies/bp/actions/workflows/ci.yml/badge.svg
+
 
 <!-- README.md starts with a logo. -->
 <p align="center">
@@ -30,12 +33,13 @@ See the accompanying file LICENSE for the full license governing this code.
 </div>
 
 <!--
-Quicklisp and Build Status badges are hidden for now because they
-are both broken.
+Quicklisp badge is hidden for now because the library is no longer in
+the registry for some reason.
 
 [![Quicklisp](http://quickdocs.org/badge/bp.svg)](https://quickref.common-lisp.net/bp.html)
-[![Build Status](https://travis-ci.com/rodentrabies/bp.svg?branch=master)](https://travis-ci.com/rodentrabies/bp)
 -->
+
+[![CI][ci-status-badge]][ci-status]
 
 **(bp)** is a Common Lisp implementation of the various components of
 the Bitcoin Protocol. The serialization and deserialization utils may
