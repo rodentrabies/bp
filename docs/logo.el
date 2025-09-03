@@ -12,8 +12,8 @@
                      ;; Horizontal distance to the control point of the cubic
                      ;; Bezier curve used to draw parens. Bigger number = more
                      ;; curve to the paren.
-                     (paren-control-distance 240)
-                     (w-paren 173)
+                     (paren-control-distance 260)
+                     (w-paren 199)
                      (h-paren 418)
                      (w-leg 199)
                      (h-leg 106)
@@ -73,11 +73,6 @@
             (set-buffer-multibyte nil)
             (erase-buffer)
             (svg-print logo)
-            (save-buffer))))
-      ;; DEBUG:
-      ;;(with-current-buffer (get-buffer-create "*svg*")
-      ;;  (erase-buffer)
-      ;;  (svg-insert-image logo))
-      )))
+            (save-buffer)))))))
 
 ;; (bp-logo :fill-color "black" :file "logo.svg")
