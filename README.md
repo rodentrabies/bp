@@ -16,15 +16,19 @@ See the accompanying file LICENSE for the full license governing this code.
 [secp256k1]: https://github.com/bitcoin-core/secp256k1
 [usocket]: https://github.com/usocket/usocket
 
+[quickdocs]: https://quickdocs.org/bp
+[quickdocs-badge]: https://api.quickdocs.org/badge/bp.svg
+
+[ultralisp]: https://ultralisp.org/projects/rodentrabies/bp
+[ultralisp-badge]: https://img.shields.io/badge/dynamic/regex?url=https%3A%2F%2Fultralisp.org%2Fprojects%2Frodentrabies%2Fbp&search=(%5Cd%7B4%7D)-(%5Cd%7B2%7D)-(%5Cd%7B2%7D)&label=Ultralisp
+
 [ci-status]: https://github.com/rodentrabies/bp/actions/workflows/ci.yml
 [ci-status-badge]: https://github.com/rodentrabies/bp/actions/workflows/ci.yml/badge.svg
 
 
-<!-- README.md starts with a logo. -->
 <p align="center">
   <img src="docs/logo.svg" width="70%" alt="(bp) logo">
 </p>
-
 
 <div align="center">
 
@@ -32,14 +36,13 @@ See the accompanying file LICENSE for the full license governing this code.
 
 </div>
 
-<!--
-Quicklisp badge is hidden for now because the library is no longer in
-the registry for some reason.
+<div align="center">
 
-[![Quicklisp](http://quickdocs.org/badge/bp.svg)](https://quickref.common-lisp.net/bp.html)
--->
-
+[![Quicklisp][quickdocs-badge]][quickdocs]
+[![Ultralisp][ultralisp-badge]][ultralisp]
 [![CI][ci-status-badge]][ci-status]
+
+</div>
 
 **(bp)** is a Common Lisp implementation of the various components of
 the Bitcoin Protocol. The serialization and deserialization utils may
