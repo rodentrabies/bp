@@ -22,7 +22,7 @@ See the accompanying file LICENSE for the full license governing this code.
 
 <!-- README.md starts with a logo. -->
 <p align="center">
-  <img src="docs/bp.svg" width="70%" alt="(bp) logo">
+  <img src="docs/logo.svg" width="70%" alt="(bp) logo">
 </p>
 
 
