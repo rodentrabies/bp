@@ -1,6 +1,12 @@
 name: CI
 
-on: [push, pull_request]
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
 
 jobs:
   test:
@@ -9,12 +15,18 @@ jobs:
     strategy:
       matrix:
         lisp: [sbcl-bin]
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest]
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
-      - name: Install external dependencies
-        run: sudo apt-get install -y libsecp256k1-dev
+      - name: Install external dependencies for Linux
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get install -y libsecp256k1-dev
+      - name: Install external dependencies for macOS
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install secp256k1
       - name: Install Roswell
         env:
           LISP: ${{ matrix.lisp }}
