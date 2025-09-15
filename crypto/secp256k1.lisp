@@ -1,4 +1,4 @@
-;;; Copyright (c) 2019-2023 BP Developers & Contributors
+;;; Copyright (c) BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
 (uiop:define-package :bp.crypto.secp256k1 (:nicknames :secp256k1 :bp/crypto/secp256k1)

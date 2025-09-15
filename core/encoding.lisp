@@ -1,4 +1,4 @@
-;;; Copyright (c) 2019-2025 BP Developers & Contributors
+;;; Copyright (c) BP Developers & Contributors
 ;;; See the accompanying file LICENSE for the full license governing this code.
 
 (uiop:define-package :bp.core.encoding (:nicknames :bp/core/encoding)
