@@ -60,5 +60,5 @@ https://github.com/bitcoin/bips/blob/master/bip-0341.mediawiki.")
 ;;;-----------------------------------------------------------------------------
 ;;; BP package parameters
 
-(defvar *bp-version* "0.0.2"
+(defvar *bp-version* "0.0.6"
   "Version of the BP package.")
