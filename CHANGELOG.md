@@ -10,6 +10,12 @@ exported functions. Generally these will become very rare with
 versions 0.1 and onward, but until 0.1 are bound to happen to make API
 as consistent as possible.
 
+## BP 0.0.6
+
+- **\[BREAKING\]** `bp:node-connection` has been fully removed in
+  favor of the more logically placed `bp.rpc:node-rpc-connection`,
+  which was introduced in `0.0.3`.
+
 ## BP 0.0.5
 
 - **\[BREAKING\]** All slash-separated package names were replaced
