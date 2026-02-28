@@ -48,7 +48,7 @@ consensus rules, throw an error if an entity is invalid for any reason."))
 
 (defun validp (entity &key context)
   "Return T if the ENTITY is valid, NIL otherwise."
-  (ignore-errors (apply #'validate entity context)))
+  (ignore-errors (validate entity :context context)))
 
 (defclass validation-context ()
   ((height      :initarg :height      :accessor @height      :initform nil)
