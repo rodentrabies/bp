@@ -406,7 +406,7 @@ now. A direct translation from Bitcoin Core's `ConvertBits` function
 in `util/strencoding.h`."
   (assert (and (typep from-bits 'integer) (<= 1 from-bits 8))
           () "FROM-BITS must be an integer from 1 to 8.")
-  (assert (and (typep to-bits 'integer) (<= 1 from-bits 8))
+  (assert (and (typep to-bits 'integer) (<= 1 to-bits 8))
           () "TO-BITS must be an integer from 1 to 8.")
   (let* ((maxv    (1- (ash 1 to-bits)))
          (maxacc  (1- (ash 1 (+ from-bits to-bits -1))))
