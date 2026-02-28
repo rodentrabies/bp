@@ -7,9 +7,49 @@
 
 (in-package :bp.tests.encoding)
 
+
+
 (def-suite encoding-tests
   :description "Tests for various encoding formats used by Bitcoin
 Protocol.")
+
+
+
+(def-suite hex-tests
+  :description "Tests for HEX encoding."
+  :in encoding-tests)
+
+(in-suite hex-tests)
+
+(test hex-isomorphism
+  :description "Randomized test that verifies that the HEX-ENCODE
+and HEX-DECODE functions form an isomorphism."
+  (for-all ((bytes (gen-buffer)))
+    (is (equalp bytes (hex-decode (hex-encode bytes))))))
+
+(test hex-corner-cases
+  :description "Corner cases for HEX encoding."
+  (is (string= (hex-encode #()) ""))
+  (is (string= (hex-encode #(0)) "00"))
+  (is (string= (hex-encode #(0 0)) "0000"))
+  (is (string= (hex-encode #(255)) "ff"))
+  (is (string= (hex-encode #(222 173 190 239)) "deadbeef"))
+  (is (string= (hex-encode #(1 35 69 103 137 171 205 239)) "0123456789abcdef")))
+
+(test hex-decode-corner-cases
+  :description "Corner cases for HEX decoding."
+  (is (equalp (hex-decode "") #()))
+  (is (equalp (hex-decode "00") #(0)))
+  (is (equalp (hex-decode "ff") #(255)))
+  (is (equalp (hex-decode "FF") #(255)))
+  (is (equalp (hex-decode "DeAdBeEf") #(222 173 190 239))))
+
+(test hex-decode-errors
+  :description "Decoding bad HEX strings."
+  (signals t (hex-decode "zz"))
+  (signals t (hex-decode "0g")))
+
+
 
 (def-suite base58-tests
   :description "Tests for BASE58/BASE58-CHECK encoding."

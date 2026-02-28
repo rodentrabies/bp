@@ -217,15 +217,31 @@ respective."
 
 
 ;;; HEX
-
-;; TODO: implement our own hex encoding/decoding.
-;; (define-alphabet hex "0123456789abcdef" :case-insensitive t)
+(define-alphabet hex "0123456789abcdef" :case-insensitive t)
 
 (defun hex-encode (bytes)
-  (ironclad:byte-array-to-hex-string (make-byte-array (length bytes) bytes)))
+  "Encode a byte array BYTES as a lowercase hex string."
+  (let* ((length (length bytes))
+         (string (make-string (* 2 length))))
+    (loop
+       :for i :below length
+       :for byte := (aref bytes i)
+       :do (setf (aref string (* 2 i))
+                 (hex-encode-digit (ash byte -4)))
+           (setf (aref string (1+ (* 2 i)))
+                 (hex-encode-digit (logand byte #xf))))
+    string))
 
 (defun hex-decode (string)
-  (ironclad:hex-string-to-byte-array string))
+  "Decode a hex string STRING into a byte array."
+  (let* ((length (/ (length string) 2))
+         (bytes (make-byte-array length)))
+    (loop
+       :for i :below length
+       :do (setf (aref bytes i)
+                 (logior (ash (hex-decode-digit (aref string (* 2 i))) 4)
+                         (hex-decode-digit (aref string (1+ (* 2 i)))))))
+    bytes))
 
 ;;; BASE58CHECK
 (define-alphabet base58 "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz")
