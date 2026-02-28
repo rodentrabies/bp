@@ -42,7 +42,8 @@
     :accessor chain-supplier-network
     :initarg :network
     :initform :mainnet
-    :documentation "Network marker (one of :MAINNET, :TESTNET, :REGTEST).")))
+    :documentation "Network marker (one of `:mainnet`, `:testnet`, `:regtest`).")))
+
 
 (define-condition unknown-entity-error (simple-error)
   ())
@@ -72,38 +73,38 @@
      (format s "Unknown transaction ~a." (unknown-transaction-id e)))))
 
 (defgeneric chain-network (supplier)
-  (:documentation "Return keyword representing the given SUPPLIER's
-network (one of :MAINNET, :TESTNET, :REGTEST).")
+  (:documentation "Return keyword representing the given `supplier`'s
+network (one of `:mainnet`, `:testnet`, `:regtest`).")
   (:method (supplier)
     (chain-supplier-network supplier)))
 
 (defgeneric chain-testnet-p (supplier)
-  (:documentation "Return NIL if SUPPLIER's network is :MAINNET and T
+  (:documentation "Return `nil` if `supplier`'s network is `:mainnet` and `t`
 otherwise.")
   (:method (supplier)
     (not (eq (chain-supplier-network supplier) :mainnet))))
 
 (defgeneric chain-get-block-hash (supplier height &key encoded errorp)
-  (:documentation "Get the hash of the block from SUPPLIER by its
-HEIGHT in the chain. HEIGHT must be an integer. If ENCODED is non-NIL,
+  (:documentation "Get the hash of the block from `supplier` by its
+`height` in the chain. `height` must be an integer. If `encoded` is non-`nil`,
 returns a hex-encoded string, otherwise returns a raw id represented
-as byte array. If there is no known block at the given HEIGHT, return
-NIL or signal an UNKNOWN-BLOCK-HASH-ERROR error, depending on the
-ERRORP value."))
+as byte array. If there is no known block at the given `height`, return
+`nil` or signal an `unknown-block-hash-error` error, depending on the
+`errorp` value."))
 
 (defgeneric chain-get-block (supplier hash &key encoded errorp)
-  (:documentation "Get raw block data from SUPPLIER by its HASH. HASH
-can be either a hex-encoded string or a byte array. If ENCODED is
-non-NIL, returns a hex-encoded string, otherwise returns CBLOCK
-object. If there is no block with the given HASH, return NIL or signal
-an UNKNOWN-BLOCK-ERROR error, depending on the ERRORP value."))
+  (:documentation "Get raw block data from `supplier` by its `hash`. `hash`
+can be either a hex-encoded string or a byte array. If `encoded` is
+non-`nil`, returns a hex-encoded string, otherwise returns `cblock`
+object. If there is no block with the given `hash`, return `nil` or signal
+an `unknown-block-error` error, depending on the `errorp` value."))
 
 (defgeneric chain-get-transaction (supplier id &key encoded errorp)
-  (:documentation "Get raw transaction data from SUPPLIER by its
-ID. ID can be either a hex-encoded string or a byte array. If ENCODED
-is non-NIL, returns a hex-encoded string, otherwise returns TX
-object. If there is no transaction with a given ID, return NIL or
-signal an UNKNOWN-TRANSACTION-ERROR error, depending on the ERRORP
+  (:documentation "Get raw transaction data from `supplier` by its
+`id`. `id` can be either a hex-encoded string or a byte array. If `encoded`
+is non-`nil`, returns a hex-encoded string, otherwise returns `tx`
+object. If there is no transaction with a given `id`, return `nil` or
+signal an `unknown-transaction-error` error, depending on the `errorp`
 value."))
 
 
@@ -117,20 +118,20 @@ value."))
   "Helper macro for generating the normalization if the entity
 identifier (block height, block hash and transaction id) and
 post-processing (encoding, decoding and error signalling) for the
-chain supplier API implementations.  
+chain supplier API implementations.
 
-ID-VAR is an entity identifier variable, which will be normalized to a
-hex-string, byte array or left unchanged if the value of ID-TYPE is
-:ENCODED, :DECODED or :AS-IS respectively.
+`id-var` is an entity identifier variable, which will be normalized to a
+hex-string, byte array or left unchanged if the value of `id-type` is
+`:encoded`, `:decoded` or `:as-is` respectively.
 
-ENCODED-VAR corresponds to ENCODED chain supplier parameter - it will
-be used in combination with BODY-TYPE argument to determine if the
-result of the BODY should be encoded, decoded (as an ENTITY-TYPE
+`encoded-var` corresponds to `encoded` chain supplier parameter - it will
+be used in combination with `body-type` argument to determine if the
+result of the `body` should be encoded, decoded (as an `entity-type`
 entity in the latter case) or left as-is.
 
-ERROPR-VAR corresponds to the ERRORP chain supplier parameter - it
-will be used to either return NIL or signal a corresponding error if
-the body returns NIL. If ERROR-TYPE is non-NIL, it will be used
+`errorp-var` corresponds to the `errorp` chain supplier parameter - it
+will be used to either return `nil` or signal a corresponding error if
+the body returns `nil`. If `error-type` is non-`nil`, it will be used
 instead of the default error type."
   (let* ((result (gensym "chain-supplier-result"))
          (id-form
@@ -177,7 +178,7 @@ instead of the default error type."
 ;;; Context-dependent API
 
 (defvar *chain-supplier* nil
-  "Global chain supplier bound by the WITH-CHAIN-SUPPLIER context manager.")
+  "Global chain supplier bound by the `with-chain-supplier` context manager.")
 
 (defmacro with-chain-supplier ((type &rest args &key &allow-other-keys) &body body)
   `(let ((*chain-supplier* (make-instance ',type ,@args)))

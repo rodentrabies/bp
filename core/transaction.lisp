@@ -141,16 +141,16 @@ serialization including witness structures."
   (hex-encode (reverse (tx-hash tx))))
 
 (defun tx-output (tx index)
-  "Return INDEXth output of the given transaction."
+  "Return `index`th output of the given transaction."
   (aref (tx-outputs tx) index))
 
 (defun tx-input (tx index)
-  "Return INDEXth input of the given transaction."
+  "Return `index`th input of the given transaction."
   (aref (tx-inputs tx) index))
 
 (defun tx-witness (tx index)
-  "Return INDEXth witness of the given transaction if it is a SegWit
-transaction, otherwise return NIL."
+  "Return `index`th witness of the given transaction if it is a SegWit
+transaction, otherwise return `nil`."
   (when (tx-witnesses tx)
     (aref (tx-witnesses tx) index)))
 

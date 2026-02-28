@@ -33,7 +33,7 @@
 
 (defclass test-chain-supplier (chain-supplier)
   ()
-  (:documentation "TEST-CHAIN-SUPPLIER retrieves chain data from a set
+  (:documentation "`test-chain-supplier` retrieves chain data from a set
 of hash tables defined above."))
 
 ;;; Implementation of chain supplier API for test supplier.
@@ -60,7 +60,7 @@ of hash tables defined above."))
 
 
 (defmacro add-test-block (name &body (height hash hex))
-  "Define a variable NAME storing test block index HEIGHT; add
+  "Define a variable `name` storing test block index `height`; add
 provided block data to the corresponding lookup structures."
   `(progn
      (eval-when (:load-toplevel)
@@ -72,7 +72,7 @@ provided block data to the corresponding lookup structures."
        (export ',name))))
 
 (defmacro add-test-transaction (name &body (hash hex))
-  "Define a variable NAME storing test transaction hash HASH; add
+  "Define a variable `name` storing test transaction hash `hash`; add
 provided transaction data to the corresponding lookup structures."
   `(progn
      (eval-when (:load-toplevel)
