@@ -20,10 +20,10 @@
 
 
 ;;; The definitions in this file contain Bitcoin consensus rules. The
-;;; top-level consensus API consists of two functions: VALIDATE, which
-;;; returns T if an entity from the model is valid, and signals an
-;;; explanatory error otherwise, and a wrapping VALIDP predicate,
-;;; which ignores the errors and retuns NIL in the latter case.
+;;; top-level consensus API consists of two functions: `validate`, which
+;;; returns `t` if an entity from the model is valid, and signals an
+;;; explanatory error otherwise, and a wrapping `validp` predicate,
+;;; which ignores the errors and retuns `nil` in the latter case.
 ;;;
 ;;; Bitcoin Consensus rules are particularly hard to reimplement,
 ;;; since there is a lot of corner cases (caused by engineering
@@ -46,7 +46,7 @@
 consensus rules, throw an error if an entity is invalid for any reason."))
 
 (defun validp (entity &key context)
-  "Return T if the ENTITY is valid, NIL otherwise."
+  "Return `t` if `entity` is valid, `nil` otherwise."
   (ignore-errors (validate entity :context context)))
 
 (defclass validation-context ()
@@ -62,15 +62,15 @@ consensus rules, throw an error if an entity is invalid for any reason."))
 during entity validation."))
 
 (defmacro ensure-validation-context ((context-sym) &body body)
-  "Ensure CONTEXT-SYM is bound to the VALIDATION-CONTEXT object before
-executing the BODY."
+  "Ensure `context-sym` is bound to the `validation-context` object before
+executing the `body`."
   (assert (symbolp context-sym))
   `(let ((,context-sym (or ,context-sym (make-instance 'validation-context))))
      ,@body))
 
 (defun extend-validation-context (context &key height block tx tx-index txin
                                             txin-index txout txout-index)
-  "Create a new VALIDATION-CONTEXT object from the given one and
+  "Create a new `validation-context` object from the given one and
 extend it with additional data if supplied."
   (make-instance
    'validation-context
@@ -160,9 +160,9 @@ extend it with additional data if supplied."
         (let ((fhash (make-byte-array 32)))
           (setf (aref fhash 31) 1)
           (return-from tx-sighash-base fhash)))
-      ;; Resize output vector to TXIN-INDEX + 1 outputs.
+      ;; Resize output vector to `txin-index` + 1 outputs.
       (setf (tx-outputs tx) (subseq (tx-outputs tx) 0 (1+ txin-index)))
-      ;; Set each output's (except the TXIN-INDEXth one) to empty
+      ;; Set each output's (except the `txin-index`th one) to empty
       ;; script and value of -1.
       (loop
          :for i :below (length (tx-outputs tx))
