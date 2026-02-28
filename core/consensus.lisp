@@ -14,8 +14,7 @@
   (:export
    #:validate
    #:validp
-   #:validation-context
-   #:make-validation-context))
+   #:validation-context))
 
 (in-package :bp.core.consensus)
 
