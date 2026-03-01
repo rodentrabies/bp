@@ -162,21 +162,21 @@
 ;;; Entity encoding/decoding API
 
 (defgeneric serialize (entity stream)
-  (:documentation "Serialize ENTITY into the stream."))
+  (:documentation "Serialize `entity` into `stream`."))
 
 (defgeneric parse (entity-class stream)
-  (:documentation "Parse bytes from the STREAM into an instance
-  of the class named ENTITY-CLASS."))
+  (:documentation "Parse bytes from the `stream` into an instance
+of the class named `entity-class`."))
 
 (defun encode (entity)
-  "Encode Bitcoin Protocol ENTITY into a hex string."
+  "Encode Bitcoin Protocol `entity` into a hex string."
   (hex-encode
    (with-output-to-byte-array (stream)
      (serialize entity stream))))
 
 (defun decode (entity-class string)
-  "Decode Bitcoin Protocol entity given by its class name ENTITY-CLASS
-from hex STRING."
+  "Decode Bitcoin Protocol entity given by its class name `entity-class`
+from hex `string`."
   (with-input-from-byte-array (stream (hex-decode string))
     (parse entity-class stream)))
 
@@ -189,7 +189,7 @@ from hex STRING."
 
 (defmacro define-alphabet (name &body (charset &key case-insensitive))
   "Define two functions for encoding/decoding digits of a given
-encoding scheme named <NAME>-ENCODE-DIGIT and <NAME>-DECODE-DIGIT
+encoding scheme named `<name>-encode-digit` and `<name>-decode-digit`
 respective."
   (assert (symbolp name) (name) "Alphabet name ~s is not a symbol." name)
   (assert (stringp charset) (charset) "Alphabet charset ~s is not a string." charset)
@@ -299,7 +299,7 @@ respective."
       bytes)))
 
 (defun base58check-encode (bytes)
-  "BASE58-encode a byte array BYTES (payload) followed by the checksum
+  "BASE58-encode a byte array `bytes` (payload) followed by the checksum
 computed as first 4 bytes of the double-SHA256 hash of the payload."
   (let* ((bytes-length (length bytes))
          (bytes/checksum-length (+ 4 bytes-length))
@@ -311,7 +311,7 @@ computed as first 4 bytes of the double-SHA256 hash of the payload."
     (base58-encode bytes/checksum)))
 
 (defun base58check-decode (string)
-  "Decode a BASE58-encoded string STRING, verify that the last 4
+  "Decode a BASE58-encoded string `string`, verify that the last 4
 bytes (checksum part) match the first 4 bytes of the double-SHA256
 hash of all but the last 4 bytes of the original sequence (payload
 part) and return the payload part."
@@ -382,7 +382,7 @@ part) and return the payload part."
 
 (defun bech32-verify-checksum (hrp data)
   "Verify checksum using the both Bech32 and Bech32m constants.
-Return the detected encoding or NIL if neither match."
+Return the detected encoding or `nil` if neither match."
   (let ((polymod (bech32-polymod (concatenate 'vector (bech32-hrp-expand hrp) data))))
     (cond ((= polymod +bech32-encoding-constant+)
            :bech32)
@@ -401,7 +401,7 @@ Return the detected encoding or NIL if neither match."
 
 (defun convert-bits (values from-bits to-bits padp output-fn)
   "Convert from one power-of-2 number base to another. Feed each digit
-to the function OUTPUT-FN. We only need this to work for octets for
+to the function `output-fn`. We only need this to work for octets for
 now. A direct translation from Bitcoin Core's `ConvertBits` function
 in `util/strencoding.h`."
   (assert (and (typep from-bits 'integer) (<= 1 from-bits 8))

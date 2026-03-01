@@ -12,20 +12,20 @@
 Protocol.")
 
 (def-suite base58-tests
-  :description "Tests for BASE58/BASE58-CHECK encoding."
+  :description "Tests for BASE58/BASE58CHECK encoding."
   :in encoding-tests)
 
 (in-suite base58-tests)
 
 (test base58-isomorphism
-  :description "Randomized test that verifies that the BASE58-ENCODE
-and BASE58-DECODE functions form an isomorphism."
+  :description "Randomized test that verifies that the `base58-encode`
+and `base58-decode` functions form an isomorphism."
   (for-all ((bytes (gen-buffer)))
     (is (equalp bytes (base58-decode (base58-encode bytes))))))
 
 (test base58check-isomorphism
   :description "Randomized test that verifies that the
-BASE58CHECK-ENCODE and BASE58CHECK-DECODE functions form an
+`base58check-encode` and `base58check-decode` functions form an
 isomorphism."
   (for-all ((bytes (gen-buffer)))
     (is (equalp bytes (base58check-decode (base58check-encode bytes))))))
@@ -38,7 +38,7 @@ isomorphism."
   (is (string= (base58-encode #(255)) "5Q")))
 
 (test base58check-corner-cases
-  :description "Corner cases for BASE58-CHECK encoding."
+  :description "Corner cases for BASE58CHECK encoding."
   (is (string= (base58check-encode #()) "3QJmnh"))
   (is (string= (base58check-encode #(0)) "1Wh4bh"))
   (is (string= (base58check-encode #(0 0 0 0)) "11114bdQda"))
@@ -49,7 +49,7 @@ isomorphism."
   (signals t (base58-decode "0"))) ;; bad character
 
 (test base58check-decode-errors
-  :description "Encoding bad BASE58-CHECK strings."
+  :description "Encoding bad BASE58CHECK strings."
   (signals base58check-no-checksum-error (base58check-decode ""))
   (signals base58check-bad-checksum-error (base58check-decode "1Wh4bm")))
 
@@ -74,14 +74,14 @@ isomorphism."
     (values bytes hrp encoding)))
 
 (defun segwit-version-opcode (number)
-  ;; TODO: maybe make this a more general utility in BP.CORE.SCRIPT.
+  ;; TODO: maybe make this a more general utility in `bp.core.script`.
   (if (<= 0 number 16)
       (intern (format nil "~a_~a" 'op number) :keyword)
       (error "Segwit version must be in between 0 and 16.")))
 
 (test bech32-isomorphism
-  :description "Randomized test that verifies that the BECH32-ENCODE
-and BECH32-DECODE functions form an isomorphism."
+  :description "Randomized test that verifies that the `bech32-encode`
+and `bech32-decode` functions form an isomorphism."
   (for-all ((bytes (gen-buffer)))
     (is (equalp bytes (bech32-assert-decode (bech32-encode "iso" bytes))))))
 
@@ -164,7 +164,7 @@ from BIP-0173 document."
 
 (test bech32m-isomorphism
   :description "Randomized test that verifies that Bech32m variants of
-the BECH32-ENCODE and BECH32-DECODE functions form an isomorphism."
+the `bech32-encode` and `bech32-decode` functions form an isomorphism."
   (for-all ((bytes (gen-buffer)))
     (is (equalp bytes (bech32m-assert-decode (bech32-encode "iso" bytes :bech32m-p t))))))
 

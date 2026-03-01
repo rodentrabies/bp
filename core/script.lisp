@@ -30,7 +30,7 @@
 (defstruct script
   commands)
 
-;;; Script's COMMANDS slot is an array of commands, each of which is either
+;;; Script's `commands` slot is an array of commands, each of which is either
 ;;;
 ;;;   - an integer for a simple command (like OP_0, OP_DUP etc),
 ;;;
@@ -120,7 +120,7 @@ otherwise."
 (defun register-opcode (code name &optional function)
   (let ((name (intern (string name) :keyword)))
     (if function
-        ;; If FUNCTION is present, this is opcode definition.
+        ;; If `function` is present, this is opcode definition.
         (setf (gethash code *opcodes-by-code*) (cons (list name) function)
               (gethash name *opcodes-by-name*) (cons code        function))
         ;; Otherwise, this is an opcode alias definition.
@@ -229,7 +229,7 @@ otherwise."
     (make-script :commands (coerce (reverse commands) 'vector))))
 
 (defvar *print-script-as-assembly* nil
-  "If non-NIL, the script will be printed without Lisp object wrapping.")
+  "If non-`nil`, the script will be printed without Lisp object wrapping.")
 
 (defmethod print-object ((script script) stream)
   (flet ((print-command  (c)
@@ -250,7 +250,7 @@ otherwise."
             (format stream "<~{~a~^ ~}>" commands))))))
 
 (defun script (&rest symbolic-commands)
-  "Construct a SCRIPT object from a sequence of Lisp objects, doing
+  "Construct a `script` object from a sequence of Lisp objects, doing
 the best effort to detect/convert the provided values."
   (flet ((command (symbolic-command)
            (etypecase symbolic-command
@@ -298,7 +298,7 @@ the best effort to detect/convert the provided values."
   (format stream "Non-standard script: ~a." (script-error-script condition)))
 
 (defun p2pk-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a standard obsolete p2pk
+  "Check if given `script-pubkey` indicates a standard obsolete p2pk
 pattern:
     <pubkkey>
     OP_CHECKSIG"
@@ -308,7 +308,7 @@ pattern:
          (= (command-opcode (aref commands 1)) (opcode :op_checksig)))))
 
 (defun p2ms-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a standard obsolete p2ms
+  "Check if given `script-pubkey` indicates a standard obsolete p2ms
 pattern:
     OP_<N>
     <key 1>
@@ -325,14 +325,14 @@ pattern:
          (every #'command-payload (subseq commands 1 (- length 2))))))
 
 (defun null-data-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY is a NULL DATA script."
+  "Check if given `script-pubkey` is a NULL DATA script."
   (let ((commands (script-commands script-pubkey)))
     (and (= (length commands) 2)
          (= (command-opcode (aref commands 0)) (opcode :op_return))
          (command-payload (aref commands 1)))))
 
 (defun p2pkh-p (script-pubkey)
-  "Check if current SCRIPT-PUBKEY indicates a standard p2pkh pattern:
+  "Check if current `script-pubkey` indicates a standard p2pkh pattern:
     OP_DUP
     OP_HASH160
     <hash160>
@@ -347,7 +347,7 @@ pattern:
          (= (command-opcode (aref commands 4)) (opcode :op_checksig)))))
 
 (defun p2sh-p (script-pubkey)
-  "Check if current SCRIPT-PUBKEY indicates the BIP 0016 (p2sh)
+  "Check if current `script-pubkey` indicates the BIP 0016 (p2sh)
 pattern:
     <redeem-script>
     OP_HASH160
@@ -362,7 +362,7 @@ pattern:
          (= (command-opcode (aref commands 2)) (opcode :op_equal)))))
 
 (defun segwit-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates the BIP 0141 (Segregated
+  "Check if given `script-pubkey` indicates the BIP 0141 (Segregated
 Witness) structure:
     <version-byte>    (1 byte, OP_{0..16})
     <witness-program> (2-40 bytes)"
@@ -378,7 +378,7 @@ Witness) structure:
          (<= 2 (length program) 40))))))
 
 (defun p2wpkh-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Public Key Hash
+  "Check if given `script-pubkey` indicates a Pay to Witness Public Key Hash
 script structure:
     OP_0
     <20-byte witness-program>"
@@ -388,7 +388,7 @@ script structure:
    (= 20 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2wsh-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a Pay to Witness Script Hash
+  "Check if given `script-pubkey` indicates a Pay to Witness Script Hash
 script structure:
     OP_0
     <32-byte witness-program>"
@@ -398,7 +398,7 @@ script structure:
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun p2tr-p (script-pubkey)
-  "Check if given SCRIPT-PUBKEY indicates a Pat to Taproot script
+  "Check if given `script-pubkey` indicates a Pat to Taproot script
 structure:
    OP_1
    <32-byte witness-program>"
@@ -409,8 +409,8 @@ structure:
    (= 32 (length (command-payload (aref (script-commands script-pubkey) 1))))))
 
 (defun script-standard-p (script-pubkey &key network)
-  "If given script is standard, return a common name for the script type (:P2SH,
-:P2PKH, :P2WSH, etc) or T, otherwise return NIL. Additionally, if the address
+  "If given script is standard, return a common name for the script type (`:p2sh`,
+`:p2pkh`, `:p2wsh`, etc) or `t`, otherwise return `nil`. Additionally, if the address
 format is defined for that type of script, return a Bitcoin address for a given
 script as a second value."
   (let ((commands (script-commands script-pubkey)))
@@ -473,10 +473,10 @@ script as a second value."
 executable one (i.e. the current code path does not contain false
 conditions), or it is a branching command.
 
-For this purpose, OP_IF pushes its condition to CONDITIONS stack in
-script state (OP_NOTIF pushes an inverted condition), OP_ELSE inverts
-the top condition in CONDITIONS, while OP_ENDIF simply pops the top
-condition. For OP_ELSE/OP_ENDIF commands, empty CONDITIONS stack means
+For this purpose, `op_if` pushes its condition to `conditions` stack in
+script state (`op_notif` pushes an inverted condition), `op_else` inverts
+the top condition in `conditions`, while `op_endif` simply pops the top
+condition. For `op_else`/`op_endif` commands, empty `conditions` stack means
 that the branching construction is unbalanced.
 
 This follows the implementation of script interpreter in Bitcoin
@@ -494,9 +494,9 @@ Core."
 
 (defvar *trace-script-execution* nil
   "Dynamic variable to control printing the steps of script execution.
-If its value is not NIL, it will be used as a first argument to the
-FORMAT function for logging script steps (i.e. setting it to T will
-print the trace to *STANDARD-OUTPUT*, while setting it to a stream
+If its value is not `nil`, it will be used as a first argument to the
+`format` function for logging script steps (i.e. setting it to `t` will
+print the trace to `*standard-output*`, while setting it to a stream
 value will write the trace to that stream).")
 
 (defun print-script-execution-state (current-command state)
@@ -576,7 +576,7 @@ value will write the trace to that stream).")
       ;; Parse and execute the redeem-script.
       (with-input-from-byte-array (stream redeem-script-bytes)
         (let ((redeem-script (parse 'script stream)))
-          ;; Override the sigversion set in EXECUTE-SCRIPTS.
+          ;; Override the sigversion set in `execute-scripts`.
           (setf (@sigversion state) (script-sigversion redeem-script))
           (cond
             ;; P2SH-P2WPKH (P2WPKH nested in P2SH).
@@ -603,7 +603,7 @@ value will write the trace to that stream).")
   (let* ((witness (@witness state))
          (witness-length (length witness))
          (witness-stack (coerce (subseq witness 0 (1- witness-length)) 'list)))
-    ;; Execute WITNESS-STACK to push data items to stack. We don't
+    ;; Execute `witness-stack` to push data items to stack. We don't
     ;; care if returned value is non-false.
     (execute-script (apply #'script witness-stack) :state state)
     ;; Verify that SHA256(<witness-script>) is equal to
@@ -623,7 +623,7 @@ value will write the trace to that stream).")
 
 (defun script-sigversion (script)
   "For non-SegWit transactions, signature version is represented as
-constant :BASE, and for SegWit ones - :WITNESS-V<N>, where N is the
+constant `:base`, and for SegWit ones - `:witness-v<N>`, where N is the
 first op of the witness script pubkey."
   (if (segwit-p script)
       (let ((segwit-version (command-number (aref (script-commands script) 0))))
@@ -631,14 +631,14 @@ first op of the witness script pubkey."
       :base))
 
 (defun execute-scripts (script-sig script-pubkey &key state)
-  "Execute SCRIPT-SIG and SCRIPT-PUBKEY in succession, preserving the
+  "Execute `script-sig` and `script-pubkey` in succession, preserving the
 stack and performing the special rule detection (P2SH, SegWit)."
   (let ((state (or state (make-script-state))))
-    ;; Execute SCRIPT-SIG - it doen't have to leave the stack in
+    ;; Execute `script-sig` - it doen't have to leave the stack in
     ;; non-false state, so we ignore the value.
     (execute-script script-sig :state state)
     ;; This is correct for all types of scripts except P2SH. Will be
-    ;; overwritten in EXECUTE-P2SH.
+    ;; overwritten in `execute-p2sh`.
     (setf (@sigversion state) (script-sigversion script-pubkey))
     (cond
       ((p2sh-p script-pubkey)

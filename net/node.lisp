@@ -100,7 +100,7 @@
       (parse (message-type-from-command (packet-command packet)) stream))))
 
 (defun perform-handshake (node peer)
-  ;; Construct our VERSION message.
+  ;; Construct our `VERSION` message.
   (let ((version-message (make-version-message
                           :receiver-address (make-network-address
                                              :timestamp (get-universal-time)
@@ -119,14 +119,14 @@
                           :user-agent *user-agent*
                           :height 0
                           :relayp nil)))
-    ;; Send our VERSION message.
+    ;; Send our `VERSION` message.
     (send-message node peer version-message)
-    ;; Receive peer's VERSION message.
+    ;; Receive peer's `VERSION` message.
     (let ((peer-version-message (receive-message node peer)))
-      ;; Exchange VERACK messages.
+      ;; Exchange `VERACK` messages.
       (send-message node peer (make-verack-message))
       (assert (typep (receive-message node peer) 'verack-message))
-      ;; Populate PEER structure.
+      ;; Populate `peer` structure.
       (setf (peer-version peer) (version-message-version peer-version-message))
       (setf (peer-services peer) (version-message-services peer-version-message))
       (setf (peer-timestamp peer) (version-message-timestamp peer-version-message))
@@ -177,7 +177,7 @@ single peer via peer-2-peer gossip protocol."))
 ;;; Network interface implementation
 
 (defmethod connect-peer ((node simple-node) &key host port)
-  ;; Open a connection to the peer and construct a new PEER structure.
+  ;; Open a connection to the peer and construct a new `peer` structure.
   (let* ((host (or host "127.0.0.1"))
          (port (or port (ecase (node-network node)
                           (:mainnet +network-port+)
@@ -191,8 +191,8 @@ single peer via peer-2-peer gossip protocol."))
                       :local-host original-node-host
                       :local-port original-node-port))
          (peer (make-peer :host host :port port :connection connection)))
-    ;; Update node's HOST and PORT slots before handshake to be able
-    ;; to construct corret NETWORK-ADDRESS structs.
+    ;; Update node's `host` and `port` slots before handshake to be able
+    ;; to construct correct `network-address` structs.
     (setf (node-host node) (usocket:get-local-address connection))
     (setf (node-port node) (usocket:get-local-port connection))
     ;; Perform a handshake, but make sure the connection is closed if
@@ -202,7 +202,7 @@ single peer via peer-2-peer gossip protocol."))
       (error (e)
         (usocket:socket-close (peer-connection peer))
         (error e)))
-    ;; Only update node's HOST and PEER slots if successfully
+    ;; Only update node's `host` and `peer` slots if successfully
     ;; connected and shook hands.
     (setf (node-host node) original-node-host)
     (setf (node-port node) original-node-port)
@@ -266,10 +266,10 @@ single peer via peer-2-peer gossip protocol."))
   (:report
    (lambda (e s)
      (format s "Transaction ~a is not in mempool or relay set." (unknown-transaction-id e))))
-  (:documentation "NOTFOUND response to +IV-MSG-TX+ GETDATA message
+  (:documentation "`notfound` response to `+iv-msg-tx+` `getdata` message
 means that the transaction that was requested is either unknown or is
 not present in mempool or relay-set, so this error is more precise
-than UNKNOWN-TRANSACTION-ERROR."))
+than `unknown-transaction-error`."))
 
 (defmethod chain-get-transaction ((node simple-node) id &key encoded errorp)
   (with-chain-supplier-normalization (id encoded errorp

@@ -11,7 +11,7 @@
                 #:ascii-string-to-byte-array)
   (:import-from :usocket)
   ;; Messages and their field accessors are automatically exported by
-  ;; the DEFMESSAGE macro. Non-message structures and other utils are
+  ;; the `defmessage` macro. Non-message structures and other utils are
   ;; exported below.
   (:export
    #:packet
@@ -126,14 +126,14 @@
   "Hash is related to a data block.")
 
 (defconstant +iv-msg-filtered-block+ 3
-  "Hash of a block header; identical to MSG_BLOCK. Only to be used in
-getdata message. Indicates the reply should be a merkleblock message
-rather than a block message; this only works if a bloom filter has
+  "Hash of a block header; identical to `MSG_BLOCK`. Only to be used in
+getdata message. Indicates the reply should be a `MERKLEBLOCK` message
+rather than a `BLOCK` message; this only works if a bloom filter has
 been set.")
 
 (defconstant +iv-msg-cmpct-block+ 4
-  "Hash of a block header; identical to MSG_BLOCK. Only to be used in
-getdata message. Indicates the reply should be a cmpctblock
+  "Hash of a block header; identical to `MSG_BLOCK`. Only to be used in
+getdata message. Indicates the reply should be a `CMPCTBLOCK`
 message. See BIP-0152 for more info.")
 
 (defmethod serialize ((struct inventory-vector) stream)
@@ -189,12 +189,12 @@ message. See BIP-0152 for more info.")
 
            ;; Additional utils depending on OPTIONS values.
            ,@(when not-implemented
-               `(;; BP:SERIALIZE method for non-implemented messages
+               `(;; `bp:serialize` method for non-implemented messages
                  ;; should just return an error.
                  (defmethod serialize ((message ,name) stream)
                    (declare (ignore stream))
                    (error "~a serialization is not implemented." ,(string-upcase command)))
-                 ;; BP:PARSE method for non-implemented messages
+                 ;; `bp:parse` method for non-implemented messages
                  ;; should not fail - such messages will usually be
                  ;; silently ignored.
                  (defmethod parse ((message-class (eql ',name)) stream)
@@ -349,7 +349,7 @@ message. See BIP-0152 for more info.")
 (defmessage getheaders-message (:not-implemented t))
 
 
-;; BLOCK
+;; TX
 
 (defmessage tx-message ()
   tx)
