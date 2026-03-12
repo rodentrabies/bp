@@ -93,8 +93,7 @@ $ apt install libsecp256k1 libsecp256k1-dev
 $ pacman -Syu libsecp256k1
 
 # macOS
-$ brew tap cuber/homebrew-libsecp256k1
-$ brew install libsecp256k1
+$ brew install secp256k1
 ```
 
 Once [secp256k1] is ready, `bp` can be installed via [quicklisp] tool:
