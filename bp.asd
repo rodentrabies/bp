@@ -8,17 +8,17 @@
   :license "MIT"
   :class :package-inferred-system
   :in-order-to ((test-op (test-op "bp/tests")))
-  ;; Components:
-  :depends-on ("bp/core/all"
-               "bp/crypto/all"
-               "bp/net/all"
-               "bp/rpc/all")
-  ;; External dependencies:
-  :depends-on ("cffi"
+  :depends-on (;; External dependencies:
+               "cffi"
                "aserve"
                "jsown"
                "ironclad"
-               "usocket"))
+               "usocket"
+               ;; Components:
+               "bp/core/all"
+               "bp/crypto/all"
+               "bp/net/all"
+               "bp/rpc/all"))
 
 (register-system-packages "bp/core/all" :bp.core)
 (register-system-packages "bp/core/block" :bp.core.block)
@@ -48,11 +48,11 @@
   :class :package-inferred-system
   :pathname "tests/"
   :perform (test-op (o c) (uiop:symbol-call :fiveam :run-all-tests))
-  ;; Components:
-  :depends-on ("bp"
-               "bp/tests/all")
-  ;; External dependencies:
-  :depends-on ("fiveam"))
+  :depends-on (;; External dependencies:
+               "fiveam"
+               ;; Target and components:
+               "bp"
+               "bp/tests/all"))
 
 (register-system-packages "bp/tests/all" :bp.tests)
 (register-system-packages "bp/tests/block" :bp.tests.block)
