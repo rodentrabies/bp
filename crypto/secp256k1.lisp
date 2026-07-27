@@ -1610,7 +1610,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 (defcfun "secp256k1_keypair_xonly_pub" :int
   (ctx       (:pointer (:struct secp256k1-context)))
   (pubkey    (:pointer (:struct secp256k1-xonly-pubkey)))
-  (pk-parity :int)
+  (pk-parity (:pointer :int))
   (keypair   (:pointer (:struct secp256k1-keypair))))
 
 ;; Tweak a keypair by adding tweak32 to the secret key and updating the public
