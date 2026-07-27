@@ -970,8 +970,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (with-foreign-objects
       ((cseckey :unsigned-char 32))
     (bytes-to-foreign seckey cseckey 32)
-    (secp256k1-ec-privkey-negate *secp256k1-context* cseckey)
-    (bytes-from-foreign seckey cseckey 32)))
+    (unless (zerop (secp256k1-ec-seckey-negate *secp256k1-context* cseckey))
+      (bytes-from-foreign seckey cseckey 32))))
 
 ;; Same as secp256k1_ec_seckey_negate, but DEPRECATED. Will be removed in
 ;; future versions.
@@ -1116,8 +1116,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
         :for cin := (mem-aptr cins '(:struct secp256k1-pubkey) i)
         :do (bytes-to-foreign in cin 64)
             (setf (mem-aref pins '(:pointer (:struct secp256k1-pubkey)) i) cin))
-      (secp256k1-ec-pubkey-combine *secp256k1-context* cpubkey pins n)
-      (bytes-from-foreign nil cpubkey 64))))
+      (unless (zerop (secp256k1-ec-pubkey-combine *secp256k1-context* cpubkey pins n))
+        (bytes-from-foreign nil cpubkey 64)))))
 
 ;; Compute a tagged hash as defined in BIP-340.
 ;;
@@ -1849,6 +1849,6 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
     (ecdsa-verify (or nbytes bytes) hash (pubkey-bytes pubkey))))
 
 (defun combine-pubkeys (&rest pubkeys)
-  (%make-pubkey
-   :bytes
-   (ec-pubkey-combine (mapcar #'pubkey-bytes pubkeys))))
+  (let ((bytes (ec-pubkey-combine (mapcar #'pubkey-bytes pubkeys))))
+    (when bytes
+      (%make-pubkey :bytes bytes))))
