@@ -88,6 +88,13 @@
         :for i :below size
         :do (setf (mem-aref pointer :unsigned-char i) (aref bytes i)))))
 
+(defmacro bytes-clear-foreign (pointer size)
+  `(let ((pointer ,pointer)
+         (size ,size))
+     (loop
+        :for i :below size
+        :do (setf (mem-aref pointer :unsigned-char i) 0))))
+
 
 ;;;-----------------------------------------------------------------------------
 ;;; secp256k1.h
@@ -363,8 +370,10 @@
   (with-foreign-objects
       ((cseed32 :unsigned-char 32))
     (bytes-to-foreign (random-bytes 32) cseed32 32)
-    (assert (not (zerop (secp256k1-context-randomize ctx cseed32)))
-            () "Context randomization error."))
+    (unwind-protect
+         (assert (not (zerop (secp256k1-context-randomize ctx cseed32)))
+                 () "Context randomization error.")
+      (bytes-clear-foreign cseed32 32)))
   ctx)
 
 (defvar *secp256k1-context* (context-randomize (context-create)))
@@ -879,9 +888,11 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
        (cseckey :unsigned-char 32))
     (bytes-to-foreign msg32 cmsg32 32)
     (bytes-to-foreign seckey cseckey 32)
-    (unless (zerop (secp256k1-ecdsa-sign *secp256k1-context* csignature cmsg32 cseckey
-                                         (null-pointer) (null-pointer)))
-      (bytes-from-foreign nil csignature 64))))
+    (unwind-protect
+         (unless (zerop (secp256k1-ecdsa-sign *secp256k1-context* csignature cmsg32 cseckey
+                                              (null-pointer) (null-pointer)))
+           (bytes-from-foreign nil csignature 64))
+      (bytes-clear-foreign cseckey 32))))
 
 ;; Verify an ECDSA secret key.
 ;;
@@ -903,8 +914,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (with-foreign-objects
       ((cseckey :unsigned-char 32))
     (bytes-to-foreign seckey cseckey 32)
-    (unless (zerop (secp256k1-ec-seckey-verify *secp256k1-context* cseckey))
-      t)))
+    (unwind-protect
+         (unless (zerop (secp256k1-ec-seckey-verify *secp256k1-context* cseckey))
+           t)
+      (bytes-clear-foreign cseckey 32))))
 
 ;; Compute the public key for a secret key.
 ;;
@@ -924,8 +937,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
       ((cpubkey '(:struct secp256k1-pubkey))
        (cseckey :unsigned-char 32))
     (bytes-to-foreign seckey cseckey 32)
-    (unless (zerop (secp256k1-ec-pubkey-create *secp256k1-context* cpubkey cseckey))
-      (bytes-from-foreign nil cpubkey 64))))
+    (unwind-protect
+         (unless (zerop (secp256k1-ec-pubkey-create *secp256k1-context* cpubkey cseckey))
+           (bytes-from-foreign nil cpubkey 64))
+      (bytes-clear-foreign cseckey 32))))
 
 ;; Negates a secret key in place.
 ;;
@@ -945,8 +960,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (with-foreign-objects
       ((cseckey :unsigned-char 32))
     (bytes-to-foreign seckey cseckey 32)
-    (unless (zerop (secp256k1-ec-seckey-negate *secp256k1-context* cseckey))
-      (bytes-from-foreign seckey cseckey 32))))
+    (unwind-protect
+         (unless (zerop (secp256k1-ec-seckey-negate *secp256k1-context* cseckey))
+           (bytes-from-foreign seckey cseckey 32))
+      (bytes-clear-foreign cseckey 32))))
 
 ;; Negates a public key in place.
 ;;
