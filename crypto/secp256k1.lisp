@@ -2508,7 +2508,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (%make-pubkey :bytes (ec-pubkey-create (key-bytes key))))
 
 (defun parse-pubkey (bytes)
-  (%make-pubkey :bytes (ec-pubkey-parse bytes)))
+  (let ((bytes (ec-pubkey-parse bytes)))
+    (when bytes
+      (%make-pubkey :bytes bytes))))
 
 (defun serialize-pubkey (pubkey &key compressed)
   (ec-pubkey-serialize (pubkey-bytes pubkey) :compressed compressed))
@@ -2521,7 +2523,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
                   (ecdsa-signature-parse-der bytes))
                  (:relaxed
                   (ecdsa-signature-parse-der-lax bytes)))))
-    (%make-signature :bytes bytes)))
+    (when bytes
+      (%make-signature :bytes bytes))))
 
 (defun serialize-signature (signature &key (type :der))
   (ecase type
@@ -2534,9 +2537,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (%make-signature :bytes (ecdsa-sign hash (key-bytes key))))
 
 (defun verify-signature (pubkey hash signature)
-  (let* ((bytes  (signature-bytes signature))
-         (nbytes (ecdsa-signature-normalize bytes)))
-    (ecdsa-verify (or nbytes bytes) hash (pubkey-bytes pubkey))))
+  (when (and pubkey signature)
+    (let* ((bytes  (signature-bytes signature))
+           (nbytes (ecdsa-signature-normalize bytes)))
+      (ecdsa-verify (or nbytes bytes) hash (pubkey-bytes pubkey)))))
 
 (defun combine-pubkeys (&rest pubkeys)
   (let ((bytes (ec-pubkey-combine (mapcar #'pubkey-bytes pubkeys))))
