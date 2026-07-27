@@ -71,10 +71,6 @@
 
 (use-foreign-library libsecp256k1)
 
-;; This is incorrect but fits both 64-bit Linux and 64-bit macOS, so
-;; is good enough for now.
-(defctype size :unsigned-long)
-
 (defmacro bytes-from-foreign (bytes pointer size)
   `(let* ((pointer ,pointer)
           (size ,size)
@@ -460,7 +456,7 @@
   (ctx      (:pointer (:struct secp256k1-context)))
   (pubkey   (:pointer (:struct secp256k1-pubkey)))
   (input    (:pointer :unsigned-char))
-  (inputlen size))
+  (inputlen :size))
 
 (defun ec-pubkey-parse (input)
   (let ((inputlen (length input)))
@@ -490,7 +486,7 @@
 (defcfun "secp256k1_ec_pubkey_serialize" :int
   (ctx       (:pointer (:struct secp256k1-context)))
   (output    (:pointer :unsigned-char))
-  (outputlen (:pointer size))
+  (outputlen (:pointer :size))
   (pubkey    (:pointer (:struct secp256k1-pubkey)))
   (flags     :unsigned-int))
 
@@ -498,15 +494,15 @@
   (let ((outputlen (if compressed 33 65)))
     (with-foreign-objects
         ((coutput :unsigned-char outputlen)
-         (coutputlen 'size 1)
+         (coutputlen :size 1)
          (cpubkey '(:struct secp256k1-pubkey)))
-      (setf (mem-aref coutputlen 'size 0) outputlen)
+      (setf (mem-aref coutputlen :size 0) outputlen)
       (bytes-to-foreign pubkey cpubkey 64)
       (secp256k1-ec-pubkey-serialize *secp256k1-context* coutput coutputlen cpubkey
                                      (if compressed
                                          +secp256k1-ec-compressed+
                                          +secp256k1-ec-uncompressed+))
-      (bytes-from-foreign nil coutput (mem-aref coutputlen :unsigned-int 0)))))
+      (bytes-from-foreign nil coutput (mem-aref coutputlen :size 0)))))
 
 ;; Compare two public keys using lexicographic (of compressed serialization) order
 ;;
@@ -533,7 +529,7 @@
 (defcfun "secp256k1_ec_pubkey_sort" :int
   (ctx       (:pointer (:struct secp256k1-context)))
   (pubkeys   (:pointer (:pointer (:struct secp256k1-pubkey))))
-  (n-pubkeys size))
+  (n-pubkeys :size))
 
 ;; Parse an ECDSA signature in compact (64 bytes) format.
 ;;
@@ -583,7 +579,7 @@
   (ctx      (:pointer (:struct secp256k1-context)))
   (sig      (:pointer (:struct secp256k1-ecdsa-signature)))
   (input    (:pointer :unsigned-char))
-  (inputlen size))
+  (inputlen :size))
 
 (defun ecdsa-signature-parse-der (input)
   (let ((inputlen (length input)))
@@ -703,19 +699,19 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 (defcfun "secp256k1_ecdsa_signature_serialize_der" :int
   (ctx       (:pointer (:struct secp256k1-context)))
   (output    (:pointer :unsigned-char))
-  (outputlen (:pointer size))
+  (outputlen (:pointer :size))
   (sig       (:pointer (:struct secp256k1-ecdsa-signature))))
 
 (defun ecdsa-signature-serialize-der (signature)
   (with-foreign-objects
       ((coutput :unsigned-char 74)
-       (coutputlen 'size 1)
+       (coutputlen :size 1)
        (csignature '(:struct secp256k1-ecdsa-signature)))
-    (setf (mem-aref coutputlen 'size 0) 74)
+    (setf (mem-aref coutputlen :size 0) 74)
     (bytes-to-foreign signature csignature 64)
     (unless (zerop (secp256k1-ecdsa-signature-serialize-der
                     *secp256k1-context* coutput coutputlen csignature))
-      (bytes-from-foreign nil coutput (mem-aref coutputlen 'size 0)))))
+      (bytes-from-foreign nil coutput (mem-aref coutputlen :size 0)))))
 
 ;; Serialize an ECDSA signature in compact (64 byte) format.
 ;;
@@ -1054,7 +1050,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ctx (:pointer (:struct secp256k1-context)))
   (out (:pointer (:struct secp256k1-pubkey)))
   (ins (:pointer (:pointer (:struct secp256k1-pubkey))))
-  (n   size))
+  (n   :size))
 
 (defun ec-pubkey-combine (ins)
   (let ((n (length ins)))
@@ -1091,9 +1087,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ctx    (:pointer (:struct secp256k1-context)))
   (hash32 (:pointer :unsigned-char))
   (tag    (:pointer :unsigned-char))
-  (taglen size)
+  (taglen :size)
   (msg    (:pointer :unsigned-char))
-  (msglen size))
+  (msglen :size))
 
 
 ;;;-----------------------------------------------------------------------------
@@ -1370,7 +1366,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Returns: the required size of the caller-provided memory block
 ;; In:      flags:    which parts of the context to initialize.
 ;;
-(defcfun "secp256k1_context_preallocated_size" size
+(defcfun "secp256k1_context_preallocated_size" :size
   (flags :unsigned-int))
 
 ;; Create a secp256k1 context object in caller-provided memory.
@@ -1410,7 +1406,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Returns: the required size of the caller-provided memory block.
 ;; In:      ctx: an existing context to copy.
 ;;
-(defcfun "secp256k1_context_preallocated_clone_size" size
+(defcfun "secp256k1_context_preallocated_clone_size" :size
   (ctx (:pointer (:struct secp256k1-context))))
 
 ;; Copy a secp256k1 context object into caller-provided memory.
@@ -1920,7 +1916,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ctx         (:pointer (:struct secp256k1-context)))
   (sig64       (:pointer :unsigned-char))
   (msg         (:pointer :unsigned-char))
-  (msglen      size)
+  (msglen      :size)
   (keypair     (:pointer (:struct secp256k1-keypair)))
   (extraparams (:pointer (:struct secp256k1-schnorrsig-extraparams))))
 
@@ -1938,7 +1934,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ctx    (:pointer (:struct secp256k1-context)))
   (sig64  (:pointer :unsigned-char))
   (msg    (:pointer :unsigned-char))
-  (msglen size)
+  (msglen :size)
   (pubkey (:pointer (:struct secp256k1-xonly-pubkey))))
 
 
@@ -2124,7 +2120,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (agg-pk       (:pointer (:struct secp256k1-xonly-pubkey)))
   (keyagg-cache (:pointer (:struct secp256k1-musig-keyagg-cache)))
   (pubkeys      (:pointer (:pointer (:struct secp256k1-pubkey))))
-  (n-pubkeys    size))
+  (n-pubkeys    :size))
 
 ;; Obtain the aggregate public key from a keyagg_cache.
 ;;
@@ -2372,7 +2368,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (ctx         (:pointer (:struct secp256k1-context)))
   (aggnonce    (:pointer (:struct secp256k1-musig-aggnonce)))
   (pubnonces   (:pointer (:pointer (:struct secp256k1-musig-pubnonce))))
-  (n-pubnonces size))
+  (n-pubnonces :size))
 
 ;; Takes the aggregate nonce and creates a session that is required for signing
 ;; and verification of partial signatures.
@@ -2490,7 +2486,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (sig64        (:pointer :unsigned-char))
   (session      (:pointer (:struct secp256k1-musig-session)))
   (partial-sigs (:pointer (:pointer (:struct secp256k1-musig-partial-sig))))
-  (n-sigs       size))
+  (n-sigs       :size))
 
 
 ;;;-----------------------------------------------------------------------------
