@@ -153,7 +153,7 @@
 (defcstruct secp256k1-pubkey
   (data :unsigned-char :count 64))
 
-;; Opaque data structured that holds a parsed ECDSA signature.
+;; Opaque data structure that holds a parsed ECDSA signature.
 ;;
 ;; The exact representation of data inside is implementation defined and not
 ;; guaranteed to be portable between different platforms or versions. It is
@@ -178,8 +178,8 @@
 ;;                     This will almost always be 0, but different attempt values
 ;;                     are required to result in a different nonce.
 ;;
-;; Except for test cases, this function should compute some cryptographic hash
-;; of the message, the algorithm, the key and the attempt.
+;; Except for test cases, this function should compute some cryptographic hash of
+;; the message, the algorithm, the key and the attempt.
 ;;
 ;; typedef int (*secp256k1_nonce_function)(
 ;;     unsigned char *nonce32,
@@ -223,7 +223,7 @@
 
 (defconstant +secp256k1-ec-uncompressed+ +secp256k1-flags-type-compression+)
 
-;; Prefix byte used to tag various encoded curvepoints for specific purposes.
+;; Prefix byte used to tag various encoded curvepoints for specific purposes
 (defconstant +secp256k1-tag-pubkey-even+         #x02)
 (defconstant +secp256k1-tag-pubkey-odd+          #x03)
 (defconstant +secp256k1-tag-pubkey-uncompressed+ #x04)
@@ -256,7 +256,7 @@
 ;; secp256k1_context_create (or secp256k1_context_preallocated_create), which will
 ;; take care of performing the self tests.
 ;;
-;; If the tests fail, this function will call the default error handler to abort the
+;; If the tests fail, this function will call the default error callback to abort the
 ;; program (see secp256k1_context_set_error_callback).
 ;;
 (defcfun "secp256k1_selftest" :void)
@@ -268,7 +268,7 @@
 ;; memory allocation entirely, see secp256k1_context_static and the functions in
 ;; secp256k1_preallocated.h.
 ;;
-;; Returns: a newly created context object.
+;; Returns: pointer to a newly created context object.
 ;; In:      flags: Always set to SECP256K1_CONTEXT_NONE (see below).
 ;;
 ;; The only valid non-deprecated flag in recent library versions is
@@ -298,8 +298,11 @@
 ;; called at most once for every call of this function. If you need to avoid dynamic
 ;; memory allocation entirely, see the functions in secp256k1_preallocated.h.
 ;;
-;; Returns: a newly created context object.
-;; Args:    ctx: an existing context to copy
+;; Cloning secp256k1_context_static is not possible, and should not be emulated by
+;; the caller (e.g., using memcpy). Create a new context instead.
+;;
+;; Returns: pointer to a newly created context object.
+;; Args:    ctx: pointer to a context to copy (not secp256k1_context_static).
 ;;
 (defcfun "secp256k1_context_clone" (:pointer (:struct secp256k1-context))
   (ctx (:pointer (:struct secp256k1-context))))
@@ -314,8 +317,9 @@
 ;; behaviour is undefined. In that case, secp256k1_context_preallocated_destroy must
 ;; be used instead.
 ;;
-;; Args:   ctx: an existing context to destroy, constructed using
+;; Args:   ctx: pointer to a context to destroy, constructed using
 ;;              secp256k1_context_create or secp256k1_context_clone
+;;              (i.e., not secp256k1_context_static).
 ;;
 (defcfun "secp256k1_context_destroy" :void
   (ctx (:pointer (:struct secp256k1-context))))
@@ -325,10 +329,10 @@
 
 ;; Randomizes the context to provide enhanced protection against side-channel leakage.
 ;;
-;; Returns: 1: randomization successful (or called on copy of secp256k1_context_static)
+;; Returns: 1: randomization successful
 ;;          0: error
-;; Args:    ctx:       pointer to a context object.
-;; In:      seed32:    pointer to a 32-byte random seed (NULL resets to initial state)
+;; Args:    ctx:       pointer to a context object (not secp256k1_context_static).
+;; In:      seed32:    pointer to a 32-byte random seed (NULL resets to initial state).
 ;;
 ;; While secp256k1 code is written and tested to be constant-time no matter what
 ;; secret values are, it is possible that a compiler may output code which is not,
@@ -343,21 +347,17 @@
 ;; functions that perform computations involving secret keys, e.g., signing and
 ;; public key generation. It is possible to call this function more than once on
 ;; the same context, and doing so before every few computations involving secret
-;; keys is recommended as a defense-in-depth measure.
+;; keys is recommended as a defense-in-depth measure. Randomization of the static
+;; context secp256k1_context_static is not supported.
 ;;
 ;; Currently, the random seed is mainly used for blinding multiplications of a
 ;; secret scalar with the elliptic curve base point. Multiplications of this
 ;; kind are performed by exactly those API functions which are documented to
-;; require a context that is not the secp256k1_context_static. As a rule of thumb,
+;; require a context that is not secp256k1_context_static. As a rule of thumb,
 ;; these are all functions which take a secret key (or a keypair) as an input.
 ;; A notable exception to that rule is the ECDH module, which relies on a different
 ;; kind of elliptic curve point multiplication and thus does not benefit from
 ;; enhanced protection against side-channel leakage currently.
-;;
-;; It is safe call this function on a copy of secp256k1_context_static in writable
-;; memory (e.g., obtained via secp256k1_context_clone). In that case, this
-;; function is guaranteed to return 1, but the call will have no effect because
-;; the static context (or a copy thereof) is not meant to be randomized.
 ;;
 (defcfun "secp256k1_context_randomize" :int
   (ctx    (:pointer (:struct secp256k1-context)))
@@ -379,36 +379,38 @@
 ;; an API call. It will only trigger for violations that are mentioned
 ;; explicitly in the header.
 ;;
-;; The philosophy is that these shouldn't be dealt with through a
-;; specific return value, as calling code should not have branches to deal with
-;; the case that this code itself is broken.
+;; The philosophy is that these shouldn't be dealt with through a specific
+;; return value, as calling code should not have branches to deal with the case
+;; that this code itself is broken.
 ;;
 ;; On the other hand, during debug stage, one would want to be informed about
-;; such mistakes, and the default (crashing) may be inadvisable.
-;; When this callback is triggered, the API function called is guaranteed not
-;; to cause a crash, though its return value and output arguments are
-;; undefined.
+;; such mistakes, and the default (crashing) may be inadvisable. Should this
+;; callback return instead of crashing, the return value and output arguments
+;; of the API function call are undefined. Moreover, the same API call may
+;; trigger the callback again in this case.
 ;;
-;; When this function has not been called (or called with fn==NULL), then the
-;; default handler will be used. The library provides a default handler which
-;; writes the message to stderr and calls abort. This default handler can be
+;; When this function has not been called (or called with fun==NULL), then the
+;; default callback will be used. The library provides a default callback which
+;; writes the message to stderr and calls abort. This default callback can be
 ;; replaced at link time if the preprocessor macro
 ;; USE_EXTERNAL_DEFAULT_CALLBACKS is defined, which is the case if the build
-;; has been configured with --enable-external-default-callbacks. Then the
+;; has been configured with --enable-external-default-callbacks (GNU Autotools) or
+;; -DSECP256K1_USE_EXTERNAL_DEFAULT_CALLBACKS=ON (CMake). Then the
 ;; following two symbols must be provided to link against:
-;;  - void secp256k1_default_illegal_callback_fn(const char* message, void* data);
-;;  - void secp256k1_default_error_callback_fn(const char* message, void* data);
-;; The library can call these default handlers even before a proper callback data
+;;  - void secp256k1_default_illegal_callback_fn(const char *message, void *data);
+;;  - void secp256k1_default_error_callback_fn(const char *message, void *data);
+;; The library may call a default callback even before a proper callback data
 ;; pointer could have been set using secp256k1_context_set_illegal_callback or
 ;; secp256k1_context_set_error_callback, e.g., when the creation of a context
-;; fails. In this case, the corresponding default handler will be called with
+;; fails. In this case, the corresponding default callback will be called with
 ;; the data pointer argument set to NULL.
 ;;
-;; Args: ctx:  an existing context object.
-;; In:   fun:  a pointer to a function to call when an illegal argument is
+;; Args: ctx:  pointer to a context object.
+;; In:   fun:  pointer to a function to call when an illegal argument is
 ;;             passed to the API, taking a message and an opaque pointer.
-;;             (NULL restores the default handler.)
-;;       data: the opaque pointer to pass to fun above, must be NULL for the default handler.
+;;             (NULL restores the default callback.)
+;;       data: the opaque pointer to pass to fun above, must be NULL for the
+;;             default callback.
 ;;
 ;; See also secp256k1_context_set_error_callback.
 ;;
@@ -424,18 +426,19 @@
 ;; to abort the program.
 ;;
 ;; This can only trigger in case of a hardware failure, miscompilation,
-;; memory corruption, serious bug in the library, or other error would can
-;; otherwise result in undefined behaviour. It will not trigger due to mere
+;; memory corruption, serious bug in the library, or other error that would
+;; result in undefined behaviour. It will not trigger due to mere
 ;; incorrect usage of the API (see secp256k1_context_set_illegal_callback
 ;; for that). After this callback returns, anything may happen, including
 ;; crashing.
 ;;
-;; Args: ctx:  an existing context object.
-;; In:   fun:  a pointer to a function to call when an internal error occurs,
+;; Args: ctx:  pointer to a context object.
+;; In:   fun:  pointer to a function to call when an internal error occurs,
 ;;             taking a message and an opaque pointer (NULL restores the
-;;             default handler, see secp256k1_context_set_illegal_callback
+;;             default callback, see secp256k1_context_set_illegal_callback
 ;;             for details).
-;;       data: the opaque pointer to pass to fun above, must be NULL for the default handler.
+;;       data: the opaque pointer to pass to fun above, must be NULL for the
+;;             default callback.
 ;;
 ;; See also secp256k1_context_set_illegal_callback.
 ;;
@@ -502,7 +505,7 @@
 ;;
 ;; Returns: 1 if the public key was fully valid.
 ;;          0 if the public key could not be parsed or is invalid.
-;; Args: ctx:      a secp256k1 context object.
+;; Args: ctx:      pointer to a context object.
 ;; Out:  pubkey:   pointer to a pubkey object. If 1 is returned, it is set to a
 ;;                 parsed version of input. If not, its value is undefined.
 ;; In:   input:    pointer to a serialized public key
@@ -531,14 +534,14 @@
 ;; Serialize a pubkey object into a serialized byte sequence.
 ;;
 ;; Returns: 1 always.
-;; Args:   ctx:        a secp256k1 context object.
-;; Out:    output:     a pointer to a 65-byte (if compressed==0) or 33-byte (if
+;; Args:   ctx:        pointer to a context object.
+;; Out:    output:     pointer to a 65-byte (if compressed==0) or 33-byte (if
 ;;                     compressed==1) byte array to place the serialized key
 ;;                     in.
-;; In/Out: outputlen:  a pointer to an integer which is initially set to the
+;; In/Out: outputlen:  pointer to an integer which is initially set to the
 ;;                     size of output, and is overwritten with the written
 ;;                     size.
-;; In:     pubkey:     a pointer to a secp256k1_pubkey containing an
+;; In:     pubkey:     pointer to a secp256k1_pubkey containing an
 ;;                     initialized public key.
 ;;         flags:      SECP256K1_EC_COMPRESSED if serialization should be in
 ;;                     compressed format, otherwise SECP256K1_EC_UNCOMPRESSED.
@@ -569,7 +572,7 @@
 ;; Returns: <0 if the first public key is less than the second
 ;;          >0 if the first public key is greater than the second
 ;;          0 if the two public keys are equal
-;; Args: ctx:      a secp256k1 context object.
+;; Args: ctx:      pointer to a context object
 ;; In:   pubkey1:  first public key to compare
 ;;       pubkey2:  second public key to compare
 ;;
@@ -594,9 +597,9 @@
 ;; Parse an ECDSA signature in compact (64 bytes) format.
 ;;
 ;; Returns: 1 when the signature could be parsed, 0 otherwise.
-;; Args: ctx:      a secp256k1 context object
-;; Out:  sig:      a pointer to a signature object
-;; In:   input64:  a pointer to the 64-byte array to parse
+;; Args: ctx:      pointer to a context object
+;; Out:  sig:      pointer to a signature object
+;; In:   input64:  pointer to the 64-byte array to parse
 ;;
 ;; The signature must consist of a 32-byte big endian R value, followed by a
 ;; 32-byte big endian S value. If R or S fall outside of [0..order-1], the
@@ -623,9 +626,9 @@
 ;; Parse a DER ECDSA signature.
 ;;
 ;; Returns: 1 when the signature could be parsed, 0 otherwise.
-;; Args: ctx:      a secp256k1 context object
-;; Out:  sig:      a pointer to a signature object
-;; In:   input:    a pointer to the signature to be parsed
+;; Args: ctx:      pointer to a context object
+;; Out:  sig:      pointer to a signature object
+;; In:   input:    pointer to the signature to be parsed
 ;;       inputlen: the length of the array pointed to be input
 ;;
 ;; This function will accept any valid DER encoded signature, even if the
@@ -748,13 +751,13 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Serialize an ECDSA signature in DER format.
 ;;
 ;; Returns: 1 if enough space was available to serialize, 0 otherwise
-;; Args:   ctx:       a secp256k1 context object
-;; Out:    output:    a pointer to an array to store the DER serialization
-;; In/Out: outputlen: a pointer to a length integer. Initially, this integer
+;; Args:   ctx:       pointer to a context object
+;; Out:    output:    pointer to an array to store the DER serialization
+;; In/Out: outputlen: pointer to a length integer. Initially, this integer
 ;;                    should be set to the length of output. After the call
 ;;                    it will be set to the length of the serialization (even
 ;;                    if 0 was returned).
-;; In:     sig:       a pointer to an initialized signature object
+;; In:     sig:       pointer to an initialized signature object
 ;;
 (defcfun "secp256k1_ecdsa_signature_serialize_der" :int
   (ctx       (:pointer (:struct secp256k1-context)))
@@ -776,9 +779,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Serialize an ECDSA signature in compact (64 byte) format.
 ;;
 ;; Returns: 1
-;; Args:   ctx:       a secp256k1 context object
-;; Out:    output64:  a pointer to a 64-byte array to store the compact serialization
-;; In:     sig:       a pointer to an initialized signature object
+;; Args:   ctx:       pointer to a context object
+;; Out:    output64:  pointer to a 64-byte array to store the compact serialization
+;; In:     sig:       pointer to an initialized signature object
 ;;
 ;; See secp256k1_ecdsa_signature_parse_compact for details about the encoding.
 ;;
@@ -800,7 +803,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;
 ;; Returns: 1: correct signature
 ;;          0: incorrect or unparseable signature
-;; Args:    ctx:       a secp256k1 context object.
+;; Args:    ctx:       pointer to a context object
 ;; In:      sig:       the signature being verified.
 ;;          msghash32: the 32-byte message hash being verified.
 ;;                     The verifier must make sure to apply a cryptographic
@@ -843,12 +846,12 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Convert a signature to a normalized lower-S form.
 ;;
 ;; Returns: 1 if sigin was not normalized, 0 if it already was.
-;; Args: ctx:    a secp256k1 context object
-;; Out:  sigout: a pointer to a signature to fill with the normalized form,
+;; Args: ctx:    pointer to a context object
+;; Out:  sigout: pointer to a signature to fill with the normalized form,
 ;;               or copy if the input was already normalized. (can be NULL if
 ;;               you're only interested in whether the input was already
 ;;               normalized).
-;; In:   sigin:  a pointer to a signature to check/normalize (can be identical to sigout)
+;; In:   sigin:  pointer to a signature to check/normalize (can be identical to sigout)
 ;;
 ;; With ECDSA a third-party can forge a second distinct signature of the same
 ;; message, given a single initial signature, but without knowing the key. This
@@ -910,7 +913,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Returns: 1: signature created
 ;;          0: the nonce generation function failed, or the secret key was invalid.
 ;; Args:    ctx:       pointer to a context object (not secp256k1_context_static).
-;; Out:     sig:       pointer to an array where the signature will be placed.
+;; Out:     sig:       pointer to a signature object.
 ;; In:      msghash32: the 32-byte message hash being signed.
 ;;          seckey:    pointer to a 32-byte secret key.
 ;;          noncefp:   pointer to a nonce generation function. If NULL,
@@ -945,12 +948,14 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
            (bytes-from-foreign nil csignature 64))
       (bytes-clear-foreign cseckey 32))))
 
-;; Verify an ECDSA secret key.
+;; Verify an elliptic curve secret key.
 ;;
 ;; A secret key is valid if it is not 0 and less than the secp256k1 curve order
 ;; when interpreted as an integer (most significant byte first). The
 ;; probability of choosing a 32-byte string uniformly at random which is an
-;; invalid secret key is negligible.
+;; invalid secret key is negligible. However, if it does happen it should
+;; be assumed that the randomness source is severely broken and there should
+;; be no retry.
 ;;
 ;; Returns: 1: secret key is valid
 ;;          0: secret key is invalid
@@ -1043,10 +1048,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;                 invalid according to secp256k1_ec_seckey_verify, this
 ;;                 function returns 0. seckey will be set to some unspecified
 ;;                 value if this function returns 0.
-;; In:    tweak32: pointer to a 32-byte tweak. If the tweak is invalid according to
-;;                 secp256k1_ec_seckey_verify, this function returns 0. For
-;;                 uniformly random 32-byte arrays the chance of being invalid
-;;                 is negligible (around 1 in 2^128).
+;; In:    tweak32: pointer to a 32-byte tweak, which must be valid according to
+;;                 secp256k1_ec_seckey_verify or 32 zero bytes. For uniformly
+;;                 random 32-byte tweaks, the chance of being invalid is
+;;                 negligible (around 1 in 2^128).
 ;;
 (defcfun "secp256k1_ec_seckey_tweak_add" :int
   (ctx    (:pointer (:struct secp256k1-context)))
@@ -1061,10 +1066,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Args:    ctx:   pointer to a context object.
 ;; In/Out: pubkey: pointer to a public key object. pubkey will be set to an
 ;;                 invalid value if this function returns 0.
-;; In:    tweak32: pointer to a 32-byte tweak. If the tweak is invalid according to
-;;                 secp256k1_ec_seckey_verify, this function returns 0. For
-;;                 uniformly random 32-byte arrays the chance of being invalid
-;;                 is negligible (around 1 in 2^128).
+;; In:    tweak32: pointer to a 32-byte tweak, which must be valid according to
+;;                 secp256k1_ec_seckey_verify or 32 zero bytes. For uniformly
+;;                 random 32-byte tweaks, the chance of being invalid is
+;;                 negligible (around 1 in 2^128).
 ;;
 (defcfun "secp256k1_ec_pubkey_tweak_add" :int
   (ctx    (:pointer (:struct secp256k1-context)))
@@ -1198,7 +1203,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;          0: scalar was invalid (zero or overflow) or hashfp returned 0
 ;; Args:    ctx:        pointer to a context object.
 ;; Out:     output:     pointer to an array to be filled by hashfp.
-;; In:      pubkey:     a pointer to a secp256k1_pubkey containing an initialized public key.
+;; In:      pubkey:     pointer to a secp256k1_pubkey containing an initialized public key.
 ;;          seckey:     a 32-byte scalar with which to multiply the point.
 ;;          hashfp:     pointer to a hash function. If NULL,
 ;;                      secp256k1_ecdh_hash_function_sha256 is used
@@ -1453,8 +1458,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; in the memory. In simpler words, the prealloc pointer (or any pointer derived
 ;; from it) should not be used during the lifetime of the context object.
 ;;
-;; Returns: a newly created context object.
-;; In:      prealloc: a pointer to a rewritable contiguous block of memory of
+;; Returns: pointer to newly created context object.
+;; In:      prealloc: pointer to a rewritable contiguous block of memory of
 ;;                    size at least secp256k1_context_preallocated_size(flags)
 ;;                    bytes, as detailed above.
 ;;          flags:    which parts of the context to initialize.
@@ -1472,7 +1477,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; caller-provided memory.
 ;;
 ;; Returns: the required size of the caller-provided memory block.
-;; In:      ctx: an existing context to copy.
+;; In:      ctx: pointer to a context to copy.
 ;;
 (defcfun "secp256k1_context_preallocated_clone_size" :size
   (ctx (:pointer (:struct secp256k1-context))))
@@ -1487,9 +1492,12 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; the lifetime of this context object, see the description of
 ;; secp256k1_context_preallocated_create for details.
 ;;
-;; Returns: a newly created context object.
-;; Args:    ctx:      an existing context to copy.
-;; In:      prealloc: a pointer to a rewritable contiguous block of memory of
+;; Cloning secp256k1_context_static is not possible, and should not be emulated by
+;; the caller (e.g., using memcpy). Create a new context instead.
+;;
+;; Returns: pointer to a newly created context object.
+;; Args:    ctx:      pointer to a context to copy (not secp256k1_context_static).
+;; In:      prealloc: pointer to a rewritable contiguous block of memory of
 ;;                    size at least secp256k1_context_preallocated_size(flags)
 ;;                    bytes, as detailed above.
 ;;
@@ -1513,9 +1521,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; preallocated pointer given to secp256k1_context_preallocated_create or
 ;; secp256k1_context_preallocated_clone.
 ;;
-;; Args:   ctx: an existing context to destroy, constructed using
+;; Args:   ctx: pointer to a context to destroy, constructed using
 ;;              secp256k1_context_preallocated_create or
-;;              secp256k1_context_preallocated_clone.
+;;              secp256k1_context_preallocated_clone
+;;              (i.e., not secp256k1_context_static).
 ;;
 (defcfun "secp256k1_context_preallocated_destroy" :void
  (ctx (:pointer (:struct secp256k1-context))))
@@ -1524,7 +1533,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;;-----------------------------------------------------------------------------
 ;;; secp256k1_recovery.h
 
-;; Opaque data structured that holds a parsed ECDSA signature,
+;; Opaque data structure that holds a parsed ECDSA signature,
 ;; supporting pubkey recovery.
 ;;
 ;; The exact representation of data inside is implementation defined and not
@@ -1544,9 +1553,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Parse a compact ECDSA signature (64 bytes + recovery id).
 ;;
 ;; Returns: 1 when the signature could be parsed, 0 otherwise
-;; Args: ctx:     a secp256k1 context object
-;; Out:  sig:     a pointer to a signature object
-;; In:   input64: a pointer to a 64-byte compact signature
+;; Args: ctx:     pointer to a context object
+;; Out:  sig:     pointer to a signature object
+;; In:   input64: pointer to a 64-byte compact signature
 ;;       recid:   the recovery id (0, 1, 2 or 3)
 ;;
 (defcfun "secp256k1_ecdsa_recoverable_signature_parse_compact" :int
@@ -1558,9 +1567,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Convert a recoverable signature into a normal signature.
 ;;
 ;; Returns: 1
-;; Args: ctx:    a secp256k1 context object.
-;; Out:  sig:    a pointer to a normal signature.
-;; In:   sigin:  a pointer to a recoverable signature.
+;; Args: ctx:    pointer to a context object.
+;; Out:  sig:    pointer to a normal signature.
+;; In:   sigin:  pointer to a recoverable signature.
 ;;
 (defcfun "secp256k1_ecdsa_recoverable_signature_convert" :int
   (ctx   (:pointer (:struct secp256k1-context)))
@@ -1570,10 +1579,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Serialize an ECDSA signature in compact format (64 bytes + recovery id).
 ;;
 ;; Returns: 1
-;; Args: ctx:      a secp256k1 context object.
-;; Out:  output64: a pointer to a 64-byte array of the compact signature.
-;;       recid:    a pointer to an integer to hold the recovery id.
-;; In:   sig:      a pointer to an initialized signature object.
+;; Args: ctx:      pointer to a context object.
+;; Out:  output64: pointer to a 64-byte array of the compact signature.
+;;       recid:    pointer to an integer to hold the recovery id.
+;; In:   sig:      pointer to an initialized signature object.
 ;;
 (defcfun "secp256k1_ecdsa_recoverable_signature_serialize_compact" :int
   (ctx      (:pointer (:struct secp256k1-context)))
@@ -1586,7 +1595,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Returns: 1: signature created
 ;;          0: the nonce generation function failed, or the secret key was invalid.
 ;; Args:    ctx:       pointer to a context object (not secp256k1_context_static).
-;; Out:     sig:       pointer to an array where the signature will be placed.
+;; Out:     sig:       pointer to a signature object.
 ;; In:      msghash32: the 32-byte message hash being signed.
 ;;          seckey:    pointer to a 32-byte secret key.
 ;;          noncefp:   pointer to a nonce generation function. If NULL,
@@ -1604,7 +1613,17 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 
 ;; Recover an ECDSA public key from a signature.
 ;;
-;; Returns: 1: public key successfully recovered (which guarantees a correct signature).
+;; Successful public key recovery guarantees that the signature, after normalization,
+;; passes `secp256k1_ecdsa_verify`. Thus, explicit verification is not necessary.
+;;
+;; However, a recoverable signature that successfully passes `secp256k1_ecdsa_recover`,
+;; when converted to a non-recoverable signature (using
+;; `secp256k1_ecdsa_recoverable_signature_convert`), is not guaranteed to be
+;; normalized and thus not guaranteed to pass `secp256k1_ecdsa_verify`. If a
+;; normalized signature is required, call `secp256k1_ecdsa_signature_normalize`
+;; after `secp256k1_ecdsa_recoverable_signature_convert`.
+;;
+;; Returns: 1: public key successfully recovered
 ;;          0: otherwise.
 ;; Args:    ctx:       pointer to a context object.
 ;; Out:     pubkey:    pointer to the recovered public key.
@@ -1651,7 +1670,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Returns: 1 if the public key was fully valid.
 ;;          0 if the public key could not be parsed or is invalid.
 ;;
-;; Args:   ctx: a secp256k1 context object.
+;; Args:   ctx: pointer to a context object.
 ;; Out: pubkey: pointer to a pubkey object. If 1 is returned, it is set to a
 ;;              parsed version of input. If not, it's set to an invalid value.
 ;; In: input32: pointer to a serialized xonly_pubkey.
@@ -1665,9 +1684,9 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;
 ;; Returns: 1 always.
 ;;
-;; Args:     ctx: a secp256k1 context object.
-;; Out: output32: a pointer to a 32-byte array to place the serialized key in.
-;; In:    pubkey: a pointer to a secp256k1_xonly_pubkey containing an initialized public key.
+;; Args:     ctx: pointer to a context object.
+;; Out: output32: pointer to a 32-byte array to place the serialized key in.
+;; In:    pubkey: pointer to a secp256k1_xonly_pubkey containing an initialized public key.
 ;;
 (defcfun "secp256k1_xonly_pubkey_serialize" :int
   (ctx      (:pointer (:struct secp256k1-context)))
@@ -1679,7 +1698,7 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Returns: <0 if the first public key is less than the second
 ;;          >0 if the first public key is greater than the second
 ;;          0 if the two public keys are equal
-;; Args: ctx:      a secp256k1 context object.
+;; Args: ctx:      pointer to a context object.
 ;; In:   pubkey1:  first public key to compare
 ;;       pubkey2:  second public key to compare
 ;;
@@ -1720,10 +1739,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Out:  output_pubkey: pointer to a public key to store the result. Will be set
 ;;                      to an invalid value if this function returns 0.
 ;; In: internal_pubkey: pointer to an x-only pubkey to apply the tweak to.
-;;             tweak32: pointer to a 32-byte tweak. If the tweak is invalid
-;;                      according to secp256k1_ec_seckey_verify, this function
-;;                      returns 0. For uniformly random 32-byte arrays the
-;;                      chance of being invalid is negligible (around 1 in 2^128).
+;;             tweak32: pointer to a 32-byte tweak, which must be valid
+;;                      according to secp256k1_ec_seckey_verify or 32 zero
+;;                      bytes. For uniformly random 32-byte tweaks, the chance of
+;;                      being invalid is negligible (around 1 in 2^128).
 ;;
 (defcfun "secp256k1_xonly_pubkey_tweak_add" :int
   (ctx             (:pointer (:struct secp256k1-context)))
@@ -1762,10 +1781,13 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (internal-pubkey   (:pointer (:struct secp256k1-xonly-pubkey)))
   (tweak32           (:pointer :unsigned-char)))
 
-;; Compute the keypair for a secret key.
+;; Compute the keypair for a valid secret key.
 ;;
-;; Returns: 1: secret was valid, keypair is ready to use
-;;          0: secret was invalid, try again with a different secret
+;; See the documentation of `secp256k1_ec_seckey_verify` for more information
+;; about the validity of secret keys.
+;;
+;; Returns: 1: secret key is valid
+;;          0: secret key is invalid
 ;; Args:    ctx: pointer to a context object (not secp256k1_context_static).
 ;; Out: keypair: pointer to the created keypair.
 ;; In:   seckey: pointer to a 32-byte secret key.
@@ -1790,9 +1812,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Get the public key from a keypair.
 ;;
 ;; Returns: 1 always.
-;; Args:    ctx: pointer to a context object.
-;; Out: pubkey: pointer to a pubkey object. If 1 is returned, it is set to
-;;              the keypair public key. If not, it's set to an invalid value.
+;; Args:   ctx: pointer to a context object.
+;; Out: pubkey: pointer to a pubkey object, set to the keypair public key.
 ;; In: keypair: pointer to a keypair.
 ;;
 (defcfun "secp256k1_keypair_pub" :int
@@ -1807,9 +1828,8 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;
 ;; Returns: 1 always.
 ;; Args:   ctx: pointer to a context object.
-;; Out: pubkey: pointer to an xonly_pubkey object. If 1 is returned, it is set
-;;              to the keypair public key after converting it to an
-;;              xonly_pubkey. If not, it's set to an invalid value.
+;; Out: pubkey: pointer to an xonly_pubkey object, set to the keypair
+;;              public key after converting it to an xonly_pubkey.
 ;;   pk_parity: Ignored if NULL. Otherwise, pointer to an integer that will be set to the
 ;;              pk_parity argument of secp256k1_xonly_pubkey_from_pubkey.
 ;; In: keypair: pointer to a keypair.
@@ -1834,10 +1854,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;; Args:       ctx: pointer to a context object.
 ;; In/Out: keypair: pointer to a keypair to apply the tweak to. Will be set to
 ;;                  an invalid value if this function returns 0.
-;; In:     tweak32: pointer to a 32-byte tweak. If the tweak is invalid according
-;;                  to secp256k1_ec_seckey_verify, this function returns 0. For
-;;                  uniformly random 32-byte arrays the chance of being invalid
-;;                  is negligible (around 1 in 2^128).
+;; In:     tweak32: pointer to a 32-byte tweak, which must be valid according to
+;;                  secp256k1_ec_seckey_verify or 32 zero bytes. For uniformly
+;;                  random 32-byte tweaks, the chance of being invalid is
+;;                  negligible (around 1 in 2^128).
 ;;
 (defcfun "secp256k1_keypair_xonly_tweak_add" :int
   (ctx     (:pointer (:struct secp256k1-context)))
@@ -1960,16 +1980,24 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 
 ;; Create a Schnorr signature with a more flexible API.
 ;;
-;; Same arguments as secp256k1_schnorrsig_sign except that it allows signing
+;; Same arguments as secp256k1_schnorrsig_sign32 except that it allows signing
 ;; variable length messages and accepts a pointer to an extraparams object that
 ;; allows customizing signing by passing additional arguments.
 ;;
-;; Creates the same signatures as schnorrsig_sign if msglen is 32 and the
-;; extraparams.ndata is the same as aux_rand32.
+;; Equivalent to secp256k1_schnorrsig_sign32(..., aux_rand32) if msglen is 32
+;; and extraparams is initialized as follows:
+;; ```
+;; secp256k1_schnorrsig_extraparams extraparams = SECP256K1_SCHNORRSIG_EXTRAPARAMS_INIT;
+;; extraparams.ndata = (unsigned char*)aux_rand32;
+;; ```
 ;;
+;; Returns 1 on success, 0 on failure.
+;; Args:   ctx: pointer to a context object (not secp256k1_context_static).
+;; Out:  sig64: pointer to a 64-byte array to store the serialized signature.
 ;; In:     msg: the message being signed. Can only be NULL if msglen is 0.
-;;      msglen: length of the message
-;; extraparams: pointer to a extraparams object (can be NULL)
+;;      msglen: length of the message.
+;;     keypair: pointer to an initialized keypair.
+;; extraparams: pointer to an extraparams object (can be NULL).
 ;;
 (defcfun "secp256k1_schnorrsig_sign_custom" :int
   (ctx         (:pointer (:struct secp256k1-context)))
@@ -1983,11 +2011,11 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
 ;;
 ;; Returns: 1: correct signature
 ;;          0: incorrect signature
-;; Args:    ctx: a secp256k1 context object.
+;; Args:    ctx: pointer to a context object.
 ;; In:    sig64: pointer to the 64-byte signature to verify.
 ;;          msg: the message being verified. Can only be NULL if msglen is 0.
 ;;       msglen: length of the message
-;;       pubkey: pointer to an x-only public key to verify with (cannot be NULL)
+;;       pubkey: pointer to an x-only public key to verify with
 ;;
 (defcfun "secp256k1_schnorrsig_verify" :int
   (ctx    (:pointer (:struct secp256k1-context)))
