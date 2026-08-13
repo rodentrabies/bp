@@ -47,7 +47,7 @@
 ;;;
 ;;; libsecp256k1 version:
 ;;;
-;;;     v0.7.1 (1a53f4961f337b4d166c25fce72ef0dc88806618)
+;;;     v0.8.0 (6e2c8bc4ecdc6e71dbe7a368f360d8d453ce435d)
 ;;;
 ;;;
 ;;; Comments for CFFI declarations are taken directly from the libsecp256k1
@@ -242,9 +242,6 @@
 ;; It is highly recommended to call secp256k1_selftest before using this context.
 ;;
 (defcvar "secp256k1_context_static" (:pointer (:struct secp256k1-context)))
-
-;; Deprecated alias for secp256k1_context_static.
-(defcvar "secp256k1_context_no_precomp" (:pointer (:struct secp256k1-context)))
 
 ;; Perform basic self tests (to be used in conjunction with secp256k1_context_static)
 ;;
@@ -446,6 +443,60 @@
   (ctx  (:pointer (:struct secp256k1-context)))
   (fun  :pointer)  ;; void (*fun)(const char* message, void* data)
   (data :pointer)) ;; void*
+
+;; A pointer to a function implementing SHA256's internal compression function.
+;;
+;; This function processes one or more contiguous 64-byte message blocks and
+;; updates the internal SHA256 state accordingly. The function is not responsible
+;; for counting consumed blocks or bytes, nor for performing padding.
+;;
+;; In/Out:  state:     pointer to eight 32-bit words representing the current internal state;
+;;                     the state is updated in place.
+;; In:      blocks64:  pointer to concatenation of n_blocks blocks, of 64 bytes each.
+;;                     no alignment guarantees are made for this pointer.
+;;          n_blocks:  number of contiguous 64-byte blocks to process.
+;;
+;; typedef void (*secp256k1_sha256_compression_function)(
+;;     uint32_t *state,
+;;     const unsigned char *blocks64,
+;;     size_t n_blocks
+;; );
+(defctype secp256k1-sha256-compression-function :pointer)
+
+;; Set a callback function to override the internal SHA256 compression function.
+;;
+;; This installs a callback to replace the built-in block-compression
+;; step used by the library's internal SHA256 implementation.
+;; The provided callback must exactly implement the effect of n_blocks
+;; repeated applications of the SHA256 compression function.
+;;
+;; This API exists to support environments that wish to route the
+;; SHA256 compression step through a hardware-accelerated or otherwise
+;; specialized implementation. It is NOT meant for replacing SHA256
+;; with a different hash function.
+;;
+;; Since auxiliary functions exposed by the library via a function
+;; pointer such as secp256k1_nonce_function_default do not take a
+;; context object, they will not use the callback when called directly
+;; from user code. (But they will use the callback when called from
+;; other library functions that do take a context object, e.g., when
+;; noncefp==NULL or noncefp==secp256k1_nonce_function_default is passed
+;; as an argument to secp256k1_ecdsa_sign.)
+;;
+;; Note: The provided function is tested against a set of known SHA256
+;; digests; invokes the context's illegal callback on any mismatch
+;; (which aborts by default), in order to catch basic misbehavior early.
+;; It takes well under 2.5 ms on a desktop machine.
+;; This is NOT a substitute for having proper test coverage of the
+;; supplied function outside this library.
+;;
+;; Args:    ctx:             pointer to a context object.
+;; In:      fn_compression:  pointer to a function implementing the compression function;
+;;                           passing NULL restores the default implementation.
+;;
+(defcfun "secp256k1_context_set_sha256_compression" :void
+  (ctx            (:pointer (:struct secp256k1-context)))
+  (fn-compression secp256k1-sha256-compression-function))
 
 ;; Parse a variable-length public key into the pubkey object.
 ;;
@@ -1907,15 +1958,6 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (keypair    (:pointer (:struct secp256k1-keypair)))
   (aux-rand32 (:pointer :unsigned-char)))
 
-;; Same as secp256k1_schnorrsig_sign32, but DEPRECATED. Will be removed in
-;; future versions.
-(defcfun "secp256k1_schnorrsig_sign" :int
-  (ctx        (:pointer (:struct secp256k1-context)))
-  (sig64      (:pointer :unsigned-char))
-  (msg32      (:pointer :unsigned-char))
-  (keypair    (:pointer (:struct secp256k1-keypair)))
-  (aux-rand32 (:pointer :unsigned-char)))
-
 ;; Create a Schnorr signature with a more flexible API.
 ;;
 ;; Same arguments as secp256k1_schnorrsig_sign except that it allows signing
@@ -2504,6 +2546,383 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (session      (:pointer (:struct secp256k1-musig-session)))
   (partial-sigs (:pointer (:pointer (:struct secp256k1-musig-partial-sig))))
   (n-sigs       :size))
+
+
+;;;-----------------------------------------------------------------------------
+;;; secp256k1_silentpayments.h
+;;;
+;;; This module provides an implementation for Silent Payments, as specified in
+;;; BIP352. This particularly involves the creation of input tweak data by
+;;; summing up secret or public keys and the derivation of a shared secret using
+;;; Elliptic Curve Diffie-Hellman. Combined are either:
+;;;   - spender's secret keys and recipient's public key (a * B, sender side)
+;;;   - spender's public keys and recipient's secret key (A * b, recipient side)
+;;; With this result, the necessary key material for ultimately creating/scanning
+;;; or spending Silent Payments outputs can be determined.
+;;;
+;;; Note that this module is _not_ a full implementation of BIP352, as it
+;;; inherently doesn't deal with higher-level concepts like addresses, output
+;;; script types or transactions. The intent is to provide a module for
+;;; abstracting away the elliptic-curve operations required for the protocol. For
+;;; any wallet software already using libsecp256k1, this API should provide all
+;;; the functions needed for a Silent Payments implementation without requiring
+;;; any further elliptic-curve operations from the wallet.
+;;;
+
+;; Maximum number of Silent Payments recipients per group (i.e.
+;; recipients sharing the same scan public key) as per BIP-352
+(defconstant +secp256k1-silentpayments-recipient-group-limit+ 2323)
+
+;; The data from a single recipient address
+;;
+;; This struct serves as an input argument to `silentpayments_sender_create_outputs`.
+;;
+;; `index` must be set to the position (starting with 0) of this recipient in the
+;; `recipients` array passed to `silentpayments_sender_create_outputs`. It is
+;; used to map the returned generated outputs back to the original recipient.
+;;
+;; Note:
+;; The spend public key named `spend_pubkey` may have been optionally tweaked with
+;; a label by the recipient. Whether `spend_pubkey` has actually been tagged with
+;; a label is irrelevant for the sender. As a documentation convention in this API,
+;; `unlabeled_spend_pubkey` is used to indicate when the unlabeled spend public key
+;; must be used.
+;;
+(defcstruct secp256k1-silentpayments-recipient
+  (scan-pubkey  (:struct secp256k1-pubkey))
+  (spend-pubkey (:struct secp256k1-pubkey))
+  (index        :size))
+
+;; Create Silent Payments outputs for recipient(s).
+;;
+;; Given a list of n secret keys a_1...a_n (one for each Silent Payments
+;; eligible input to spend), a serialized outpoint, and a list of recipients,
+;; create the taproot outputs. Inputs with conditional branches or multiple
+;; public keys are excluded from Silent Payments eligible inputs; see BIP352
+;; for more information.
+;;
+;; `outpoint_smallest36` refers to the smallest outpoint lexicographically
+;; from the transaction inputs (both Silent Payments eligible and non-eligible
+;; inputs). This value MUST be the smallest outpoint out of all of the
+;; transaction inputs, otherwise the recipient will be unable to find the
+;; payment. Determining the smallest outpoint from the list of transaction
+;; inputs is the responsibility of the caller. It is strongly recommended
+;; that implementations ensure they are doing this correctly by using the
+;; test vectors from BIP352.
+;;
+;; When creating more than one generated output, all of the generated outputs
+;; MUST be included in the final transaction. Dropping any of the generated
+;; outputs from the final transaction may make all or some of the outputs
+;; unfindable by the recipient.
+;;
+;; Returns: 1 if creation of outputs was successful.
+;;          0 on failure, i.e., when one of the following occurs:
+;;            - The size of any group (i.e. recipients sharing the same scan public key)
+;;              exceeds the protocol limit SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT.
+;;            - The sum of all input secret keys is 0.
+;;              (This occurs only with negligible probability if at least one of the
+;;              input secret keys is uniformly random and independent of all other keys.)
+;;            - An invalid output public key is created. (This can only happen for an
+;;              adversarially chosen recipient spend public key.)
+;;
+;; Args:                ctx: pointer to a context object
+;;                           (not secp256k1_context_static).
+;; Out:   generated_outputs: pointer to an array of pointers to xonly public keys,
+;;                           one per recipient.
+;;                           The outputs are ordered to match the original
+;;                           ordering of the recipient objects, i.e.,
+;;                           `generated_outputs[0]` is the generated output
+;;                           for the `secp256k1_silentpayments_recipient` object
+;;                           with index = 0.
+;; In:           recipients: pointer to an array of pointers to Silent Payments
+;;                           recipients, where each recipient is a scan public
+;;                           key, a spend public key, and an index indicating
+;;                           its position in the original ordering. This function
+;;                           may reorder the pointers to the recipient objects
+;;                           within the array, i.e., after the call (including on
+;;                           failure), the index fields of the recipient objects
+;;                           may no longer correspond to the positions in the
+;;                           array. Multiple recipient objects with the same scan
+;;                           public key and/or same spend public key can be passed
+;;                           if they carry different indices.
+;;             n_recipients: the size of the recipients array.
+;;      outpoint_smallest36: serialized (36-byte) smallest outpoint
+;;                           (lexicographically) from the transaction inputs
+;;                 keypairs: pointer to an array of pointers to taproot
+;;                           keypair inputs (can be NULL if no secret keys
+;;                           of taproot inputs are used)
+;;               n_keypairs: the size of the keypairs array.
+;;                  seckeys: pointer to an array of pointers to 32-byte
+;;                           secret keys of non-taproot inputs (can be NULL
+;;                           if no secret keys of non-taproot inputs are
+;;                           used)
+;;                n_seckeys: the size of the seckeys array.
+;;
+(defcfun "secp256k1_silentpayments_sender_create_outputs" :int
+  (ctx                 (:pointer (:struct secp256k1-context)))
+  (generated-outputs   (:pointer (:pointer (:struct secp256k1-xonly-pubkey))))
+  (recipients          (:pointer (:pointer (:struct secp256k1-silentpayments-recipient))))
+  (n-recipients        :size)
+  (outpoint-smallest36 (:pointer :unsigned-char))
+  (keypairs            (:pointer (:pointer (:struct secp256k1-keypair))))
+  (n-keypairs          :size)
+  (seckeys             (:pointer (:pointer :unsigned-char)))
+  (n-seckeys           :size))
+
+;; Opaque data structure that holds a Silent Payments label.
+;;
+;; Guaranteed to be 68 bytes in size. Serialized and parsed with
+;; `secp256k1_silentpayments_recipient_label_serialize` and
+;; `secp256k1_silentpayments_recipient_label_parse`.
+;;
+(defcstruct secp256k1-silentpayments-label
+  (data :unsigned-char :count 68))
+
+;; Parse a Silent Payments label.
+;;
+;; Returns: 1 when the label could be parsed, 0 otherwise.
+;; Args:    ctx: pointer to a context object
+;; Out:   label: pointer to a label object
+;; In:     in33: pointer to the 33-byte label to be parsed
+;;
+(defcfun "secp256k1_silentpayments_recipient_label_parse" :int
+  (ctx   (:pointer (:struct secp256k1-context)))
+  (label (:pointer (:struct secp256k1-silentpayments-label)))
+  (in33  (:pointer :unsigned-char)))
+
+;; Serialize a Silent Payments label
+;;
+;; Returns: 1 always
+;; Args:    ctx: pointer to a context object
+;; Out:   out33: pointer to a 33-byte array to store the serialized label
+;; In:    label: pointer to the label
+;;
+(defcfun "secp256k1_silentpayments_recipient_label_serialize" :int
+  (ctx   (:pointer (:struct secp256k1-context)))
+  (out33 (:pointer :unsigned-char))
+  (label (:pointer (:struct secp256k1-silentpayments-label))))
+
+;; Create Silent Payments label tweak and label.
+;;
+;; Given a recipient's 32 byte scan key and a label integer m, calculate the
+;; corresponding label tweak and label:
+;;
+;;     label_tweak = hash(scan_key || m)
+;;           label = label_tweak * G
+;;
+;; Returns: 1 if label tweak and label creation was successful.
+;;          0 if scan_key32 is invalid or the hash output label_tweak32 is
+;;            not a valid scalar (negligible probability per hash evaluation).
+;;
+;; WARNING: Creating a large number of labels may significantly degrade
+;; scanning performance in certain Silent Payments wallet implementations,
+;; such as light clients. The scanning function provided in this module,
+;; which is designed for full nodes, performs consistently even with hundreds
+;; of thousands of labels. Other implementations may not share this property
+;; or may be unable to use it due to lacking full transaction data.
+;;
+;; To maximize wallet interoperability, it is recommended to create only
+;; the change label (m = 0) and avoid distributing labeled addresses.
+;;
+;; Args:                ctx: pointer to a context object
+;;                           (not secp256k1_context_static)
+;; Out:               label: pointer to the resulting label
+;;            label_tweak32: pointer to the 32 byte label tweak
+;; In:           scan_key32: pointer to the recipient's 32 byte scan key
+;;                        m: integer for the m-th label (0 is used for change outputs)
+;;
+(defcfun "secp256k1_silentpayments_recipient_label_create" :int
+  (ctx           (:pointer (:struct secp256k1-context)))
+  (label         (:pointer (:struct secp256k1-silentpayments-label)))
+  (label-tweak32 (:pointer :unsigned-char))
+  (scan-key32    (:pointer :unsigned-char))
+  (m             :uint32))
+
+;; Create Silent Payments labeled spend public key.
+;;
+;; Given a recipient's spend public key and a label, calculate the
+;; corresponding labeled spend public key:
+;;
+;;     labeled_spend_pubkey = unlabeled_spend_pubkey + label
+;;
+;; The result is used by the recipient to create a Silent Payments address,
+;; consisting of the serialized and concatenated scan public key and
+;; (labeled) spend public key.
+;;
+;; Returns: 1 if labeled spend public key creation was successful.
+;;          0 if spend pubkey and label sum to zero (negligible probability for
+;;            labels created according to BIP352).
+;;
+;; Args:                    ctx: pointer to a context object
+;; Out:    labeled_spend_pubkey: pointer to the resulting labeled spend public key
+;; In:   unlabeled_spend_pubkey: pointer to the recipient's unlabeled spend public key
+;;                        label: pointer to the recipient's label
+;;
+(defcfun "secp256k1_silentpayments_recipient_create_labeled_spend_pubkey" :int
+  (ctx                    (:pointer (:struct secp256k1-context)))
+  (labeled-spend-pubkey   (:pointer (:struct secp256k1-pubkey)))
+  (unlabeled-spend-pubkey (:pointer (:struct secp256k1-pubkey)))
+  (label                  (:pointer (:struct secp256k1-silentpayments-label))))
+
+;; Opaque data structure that holds Silent Payments prevouts summary data.
+;;
+;; The exact representation of data inside is implementation defined and not
+;; guaranteed to be portable between different platforms or versions. It is
+;; however guaranteed to be 101 bytes in size, and can be safely copied/moved.
+;; This structure does not contain secret data. It can be created with
+;; `secp256k1_silentpayments_recipient_prevouts_summary_create`.
+;;
+(defcstruct secp256k1-silentpayments-prevouts-summary
+  (data :unsigned-char :count 101))
+
+;; Compute Silent Payments prevouts summary from prevout public keys and transaction
+;; inputs.
+;;
+;; Given a list of n public keys A_1...A_n (one for each Silent Payments
+;; eligible input to spend) and a serialized outpoint_smallest36, create a
+;; `prevouts_summary` object. This object summarizes the prevout data from the
+;; transaction inputs needed for scanning.
+;;
+;; `outpoint_smallest36` refers to the smallest outpoint lexicographically
+;; from the transaction inputs (both Silent Payments eligible and non-eligible
+;; inputs). This value MUST be the smallest outpoint out of all of the
+;; transaction inputs, otherwise the recipient will be unable to find the
+;; payment.
+;;
+;; The public keys have to be passed in via two different parameter pairs, one
+;; for regular and one for x-only public keys, in order to avoid the need of
+;; users converting to a common public key format before calling this function.
+;; The resulting data can be used for scanning on the recipient side.
+;;
+;; Returns: 1 if prevouts summary creation was successful.
+;;          0 if the transaction is not a Silent Payments transaction.
+;;
+;; Args:                 ctx: pointer to a context object
+;; Out:     prevouts_summary: pointer to prevouts_summary object containing the
+;;                            summed public key and input_hash.
+;; In:   outpoint_smallest36: serialized smallest outpoint (lexicographically)
+;;                            from the transaction inputs
+;;             xonly_pubkeys: pointer to an array of pointers to taproot
+;;                            x-only public keys (can be NULL if no taproot
+;;                            inputs are used)
+;;           n_xonly_pubkeys: the size of the xonly_pubkeys array.
+;;                   pubkeys: pointer to an array of pointers to non-taproot
+;;                            public keys (can be NULL if no non-taproot
+;;                            inputs are used)
+;;                 n_pubkeys: the size of the pubkeys array.
+;;
+(defcfun "secp256k1_silentpayments_recipient_prevouts_summary_create" :int
+  (ctx                 (:pointer (:struct secp256k1-context)))
+  (prevouts-summary    (:pointer (:struct secp256k1-silentpayments-prevouts-summary)))
+  (outpoint-smallest36 (:pointer :unsigned-char))
+  (xonly-pubkeys       (:pointer (:pointer (:struct secp256k1-xonly-pubkey))))
+  (n-xonly-pubkeys     :size)
+  (pubkeys             (:pointer (:pointer (:struct secp256k1-pubkey))))
+  (n-pubkeys           :size))
+
+;; Type of callback function for label lookups
+;;
+;; A function of this type will be used to retrieve the label tweak for a given
+;; label during scanning. A typical implementation will perform a lookup in a
+;; key-value store called the "label cache".
+;;
+;; For creating the label cache data,
+;; `secp256k1_silentpayments_recipient_label_create` and
+;; `secp256k1_silentpayments_recipient_label_serialize` can be used.
+;;
+;; Returns: pointer to the 32-byte label tweak if there is a match.
+;;          NULL pointer if there is no match.
+;;
+;; In:         label: pointer to the serialized 33-byte label to check
+;;                    (computed during scanning)
+;;     label_context: pointer to the recipient's label cache.
+;;
+;; typedef const unsigned char* (*secp256k1_silentpayments_label_lookup)(
+;;     const unsigned char* label33,
+;;     const void* label_context
+;; );
+(defctype secp256k1-silentpayments-label-lookup :pointer)
+
+;; Found outputs struct
+;;
+;; Struct for holding a found output along with data needed to spend it later.
+;;
+;;           output: the x-only public key for the taproot output
+;;            tweak: the 32-byte tweak needed to spend the output
+;; found_with_label: boolean value to indicate if the output was sent to a
+;;                   labeled address. If true, label will be set to a valid value.
+;;            label: the label used. If found_with_label = false, this is set to
+;;                   an invalid value.
+;;
+(defcstruct secp256k1-silentpayments-found-output
+  (output           (:struct secp256k1-xonly-pubkey))
+  (tweak            :unsigned-char :count 32)
+  (found-with-label :int)
+  (label            (:struct secp256k1-silentpayments-label)))
+
+;; Scan for Silent Payments transaction outputs.
+;;
+;; Given a prevouts_summary object, a recipient's 32 byte scan key and spend public key,
+;; and the relevant transaction outputs, scan for outputs belonging to
+;; the recipient and return the tweak(s) needed for spending the output(s). An
+;; optional label_lookup callback function and label_context can be passed if
+;; the recipient uses labels. This allows for checking if a label exists in
+;; the recipients label cache and retrieving the label tweak during scanning.
+;;
+;; If used, the `label_lookup` function must return a pointer to a 32-byte label
+;; tweak if the label is found, or NULL otherwise. The returned pointer must remain
+;; valid until the next call to `label_lookup` or until the function returns,
+;; whichever comes first. It is not retained beyond that.
+;;
+;; For creating the label cache, `secp256k1_silentpayments_recipient_label_create`
+;; and `secp256k1_silentpayments_recipient_label_serialize` can be used.
+;;
+;; Note:
+;; Scanning is bounded by SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT and may
+;; miss outputs if a transaction contains more outputs for a single scan public
+;; key group than this limit.
+;;
+;; Returns: 1 if output scanning was successful.
+;;          0 if the transaction is not a Silent Payments transaction,
+;;            or if the arguments are invalid.
+;;
+;; Args:                   ctx: pointer to a context object
+;; Out:          found_outputs: pointer to an array of pointers to found
+;;                              output objects. The found outputs array MUST
+;;                              have the same length as the tx_outputs array.
+;;             n_found_outputs: pointer to an integer indicating the final
+;;                              size of the found outputs array. This number
+;;                              represents the number of outputs found while
+;;                              scanning (0 if none are found). Can't be larger than
+;;                              SECP256K1_SILENTPAYMENTS_RECIPIENT_GROUP_LIMIT.
+;; In:              tx_outputs: pointer to the transaction's x-only public key outputs,
+;;                              in their original transaction (vout) order
+;;                n_tx_outputs: the size of the tx_outputs array.
+;;                  scan_key32: pointer to the recipient's 32 byte scan key. The scan
+;;                              key is valid if it passes secp256k1_ec_seckey_verify
+;;            prevouts_summary: pointer to the transaction prevouts summary data (see
+;;                              `secp256k1_silentpayments_recipient_prevouts_summary_create`).
+;;      unlabeled_spend_pubkey: pointer to the recipient's unlabeled spend public key
+;;                label_lookup: pointer to a callback function for looking up
+;;                              a label value. This function takes a serialized 33-byte
+;;                              label as an argument and returns a pointer to the
+;;                              32-byte label tweak if the label exists, otherwise
+;;                              returns a NULL pointer (NULL if labels are not
+;;                              used)
+;;               label_context: pointer to a label context object (NULL if
+;;                              labels are not used or context is not needed)
+;;
+(defcfun "secp256k1_silentpayments_recipient_scan_outputs" :int
+  (ctx                    (:pointer (:struct secp256k1-context)))
+  (found-outputs          (:pointer (:pointer (:struct secp256k1-silentpayments-found-output))))
+  (n-found-outputs        (:pointer :uint32))
+  (tx-outputs             (:pointer (:pointer (:struct secp256k1-xonly-pubkey))))
+  (n-tx-outputs           :size)
+  (scan-key32             (:pointer :unsigned-char))
+  (prevouts-summary       (:pointer (:struct secp256k1-silentpayments-prevouts-summary)))
+  (unlabeled-spend-pubkey (:pointer (:struct secp256k1-pubkey)))
+  (label-lookup           secp256k1-silentpayments-label-lookup)
+  (label-context          :pointer)) ;; const void*
 
 
 ;;;-----------------------------------------------------------------------------
