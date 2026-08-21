@@ -142,11 +142,11 @@
   ((host
     :accessor node-host
     :initarg :host
-    :initform nil)
+    :initform "0.0.0.0")
    (port
     :accessor node-port
     :initarg :port
-    :initform +bp-network-port+)
+    :initform 0)
    (peer
     :accessor node-peer
     :initform nil))
@@ -155,12 +155,6 @@ single peer via peer-2-peer gossip protocol."))
 
 (defmethod initialize-instance :after ((node simple-node) &key peer)
   (let ((network (node-network node)))
-    ;; Initialize local port.
-    (setf (node-port node)
-          (ecase network
-            (:mainnet +bp-network-port+)
-            (:testnet +bp-testnet-network-port+)
-            (:regtest +bp-regtest-network-port+)))
     ;; Connect to a discovered peer or to a provided address.
     (multiple-value-bind (peer-host peer-port)
         (cond ((eq peer :discover)
@@ -183,18 +177,11 @@ single peer via peer-2-peer gossip protocol."))
                           (:mainnet +network-port+)
                           (:testnet +testnet-network-port+)
                           (:regtest +regtest-network-port+))))
-         (original-node-host (node-host node))
-         (original-node-port (node-port node))
          (connection (usocket:socket-connect
-                      host port
-                      :element-type '(unsigned-byte 8)
-                      :local-host original-node-host
-                      :local-port original-node-port))
+                      host
+                      port
+                      :element-type '(unsigned-byte 8)))
          (peer (make-peer :host host :port port :connection connection)))
-    ;; Update node's `host` and `port` slots before handshake to be able
-    ;; to construct correct `network-address` structs.
-    (setf (node-host node) (usocket:get-local-address connection))
-    (setf (node-port node) (usocket:get-local-port connection))
     ;; Perform a handshake, but make sure the connection is closed if
     ;; handshake fails.
     (handler-case
@@ -202,10 +189,7 @@ single peer via peer-2-peer gossip protocol."))
       (error (e)
         (usocket:socket-close (peer-connection peer))
         (error e)))
-    ;; Only update node's `host` and `peer` slots if successfully
-    ;; connected and shook hands.
-    (setf (node-host node) original-node-host)
-    (setf (node-port node) original-node-port)
+    ;; Only record the peer if we successfully connected and shook hands.
     (setf (node-peer node) peer)))
 
 (defmethod disconnect-peer ((node simple-node) (peer (eql :all)))
