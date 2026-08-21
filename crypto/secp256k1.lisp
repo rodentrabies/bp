@@ -1945,7 +1945,10 @@ arbitrary subset of format violations (see Bitcoin's pubkey.cpp)."
   (noncefp secp256k1-nonce-function-hardened)
   (ndata   :pointer)) ;; void*
 
-(defconstant +secp256k1-schnorrsig-extraparams-magic+ '(#xda #x6f #xb3 #x8c))
+(defconstant +secp256k1-schnorrsig-extraparams-magic+
+  (if (boundp '+secp256k1-schnorrsig-extraparams-magic+)
+      (symbol-value '+secp256k1-schnorrsig-extraparams-magic+)
+      #(#xda #x6f #xb3 #x8c)))
 
 ;; Create a Schnorr signature.
 ;;
