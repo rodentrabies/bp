@@ -38,16 +38,44 @@
   ;;         "Currently IPv4 addresses are supported.")
   (usocket:hbo-to-dotted-quad (usocket:ip-from-octet-buffer bytes :start 12)))
 
-(defvar *dns-seed* '("seed.bitcoin.sipa.be")
-  "DNS seed is a list of hardcoded host names for Bitcoin nodes that
-can accept new connections when bootstrapping new nodes.")
+(defparameter *dns-seeds* '("seed.bitcoin.sipa.be"
+                            "dnsseed.bluematt.me"
+                            "seed.btc.petertodd.net"
+                            "seed.bitcoin.sprovoost.nl"
+                            "dnsseed.emzy.de"
+                            "seed.bitcoin.wiz.biz"
+                            "seed.mainnet.achownodes.xyz")
+  "A list of hardcoded host names for Bitcoin nodes that can accept new
+connections when bootstrapping new nodes. The list mirrors the seeds
+shipped with Bitcoin Core.")
 
-(defun random-peer-address ()
-  (flet ((randelt (lst) (nth (random (length lst)) lst)))
-    (randelt
-     ;; NOTE: currently only supports IPv4 address, hence the filtering.
-     (mapcar
-      (lambda (addr) (usocket:hbo-to-dotted-quad (usocket:ip-from-octet-buffer addr)))
-      (remove-if-not
-       (lambda (addr) (= (length addr) 4))
-       (usocket:get-hosts-by-name (randelt *dns-seed*)))))))
+(defparameter *testnet-dns-seeds* '("testnet-seed.bitcoin.jonasschnelli.ch"
+                                    "seed.tbtc.petertodd.net"
+                                    "seed.testnet.bitcoin.sprovoost.nl"
+                                    "testnet-seed.bluematt.me"
+                                    "seed.testnet.achownodes.xyz"))
+
+(defun random-peer-address (network)
+  (flet ((random-element (lst)
+           (nth (random (length lst)) lst))
+         (seed-addresses (seed)
+           (mapcar
+            (lambda (addr)
+              (usocket:hbo-to-dotted-quad (usocket:ip-from-octet-buffer addr)))
+            ;; NOTE: currently only supports IPv4 address, hence the filtering.
+            (remove-if-not
+             (lambda (addr) (= (length addr) 4))
+             (ignore-errors (usocket:get-hosts-by-name seed))))))
+    ;; Try all seeds in random order until one responds, pick one of
+    ;; its addresses at random.
+    (loop :for remaining-seeds := (case network
+                                    (:mainnet *dns-seeds*)
+                                    (:testnet *testnet-dns-seeds*))
+          :while remaining-seeds
+          :for seed := (random-element remaining-seeds)
+          :for addresses := (seed-addresses seed)
+          :do (setf remaining-seeds (remove seed remaining-seeds :test #'string=))
+              (when addresses (return (random-element addresses)))
+              (setf remaining-seeds (remove seed remaining-seeds :test #'string=))
+          :finally (unless (eq network :regtest)
+                     (error "None of the DNS seeds resolved to a usable address.")))))

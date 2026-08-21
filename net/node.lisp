@@ -158,9 +158,7 @@ single peer via peer-2-peer gossip protocol."))
     ;; Connect to a discovered peer or to a provided address.
     (multiple-value-bind (peer-host peer-port)
         (cond ((eq peer :discover)
-               (unless (eq network :mainnet)
-                 (error "Peer discovery currently only supported for mainnet."))
-               (values (random-peer-address) nil))
+               (values (random-peer-address network) nil))
               ((stringp peer)
                (split-host/port-string peer))
               (t
