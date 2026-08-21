@@ -153,7 +153,7 @@
   (:documentation "Simple Bitcoin network node communicating with a
 single peer via peer-2-peer gossip protocol."))
 
-(defmethod initialize-instance :after ((node simple-node) &key peer)
+(defmethod initialize-instance :after ((node simple-node) &key (peer :discover))
   (let ((network (node-network node)))
     ;; Connect to a discovered peer or to a provided address.
     (multiple-value-bind (peer-host peer-port)
