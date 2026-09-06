@@ -204,6 +204,11 @@ message. See BIP-0152 for more info.")
 
 ;;;-----------------------------------------------------------------------------
 ;;; Message declarations
+;;;
+;;; The reference:
+;;;
+;;;     https://en.bitcoin.it/wiki/Protocol_documentation#Message_types
+;;;
 
 ;;; VERSION
 
@@ -348,7 +353,39 @@ message. See BIP-0152 for more info.")
     (make-notfound-message :inventory inventory)))
 
 (defmessage getblocks-message (:not-implemented t))
-(defmessage getheaders-message (:not-implemented t))
+
+
+;;; GETHEADERS
+
+(defmessage getheaders-message ()
+  version
+  block-locator-hashes
+  hash-stop)
+
+(defmethod serialize ((message getheaders-message) stream)
+  (let* ((version (getheaders-message-version message))
+         (block-locator-hashes (getheaders-message-block-locator-hashes message))
+         (locator-size (length block-locator-hashes))
+         (hash-stop (getheaders-message-hash-stop message)))
+    (write-int version stream :size 4 :byte-order :little)
+    (write-varint locator-size stream)
+    (loop
+      :for hash :across block-locator-hashes
+      :do (write-bytes hash stream 32))
+    (write-bytes hash-stop stream 32)))
+
+(defmethod parse ((message-class (eql 'getheaders-message)) stream)
+  (let* ((version (read-int stream :size 4 :byte-order :little))
+         (locator-size (read-varint stream))
+         (block-locator-hashes (make-array locator-size)))
+    (loop
+      :for i :below locator-size
+      :do (setf (aref block-locator-hashes i) (read-bytes stream 32)))
+    (let ((hash-stop (read-bytes stream 32)))
+      (make-getheaders-message
+       :version version
+       :block-locator-hashes block-locator-hashes
+       :hash-stop hash-stop))))
 
 
 ;; TX
@@ -374,7 +411,35 @@ message. See BIP-0152 for more info.")
 (defmethod parse ((message-class (eql 'block-message)) stream)
   (make-block-message :block (parse 'cblock stream)))
 
-(defmessage headers-message (:not-implemented t))
+
+;; HEADERS
+
+(defmessage headers-message ()
+  headers)
+
+(defmethod serialize ((message headers-message) stream)
+  (let* ((headers (headers-message-headers message))
+         (headers-size (length headers)))
+    (write-varint headers-size stream)
+    (loop
+      :for header :across headers
+      :do (serialize header stream)
+          ;; Each header in a `HEADERS` message is followed by a
+          ;; transaction count, which is always 0.
+          (write-varint 0 stream))))
+
+(defmethod parse ((message-class (eql 'headers-message)) stream)
+  (let* ((headers-size (read-varint stream))
+         (headers (make-array headers-size)))
+    (loop
+      :for i :below headers-size
+      :do (setf (aref headers i) (parse 'block-header stream))
+          ;; The transaction count following each header in `HEADERS`
+          ;; is always 0, but must be consumed and discarded.
+          (read-varint stream))
+    (make-headers-message :headers headers)))
+
+
 (defmessage getaddr-message (:not-implemented t))
 (defmessage mempool-message (:not-implemented t))
 (defmessage checkorder-message (:not-implemented t))
