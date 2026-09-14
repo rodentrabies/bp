@@ -278,6 +278,8 @@ message. See BIP-0152 for more info.")
 
 
 (defmessage addr-message (:not-implemented t))
+(defmessage addrv2-message (:not-implemented t))
+(defmessage sendaddrv2-message (:not-implemented t))
 
 
 ;; INV
@@ -416,3 +418,11 @@ message. See BIP-0152 for more info.")
 (defmessage cmpctblock-message (:not-implemented t))
 (defmessage getblocktxn-message (:not-implemented t))
 (defmessage blocktxn-message (:not-implemented t))
+(defmessage wtxidrelay-message (:not-implemented t))
+(defmessage sendtxrcncl-message (:not-implemented t))
+(defmessage getcfilters-message (:not-implemented t))
+(defmessage cfilter-message (:not-implemented t))
+(defmessage getcfheaders-message (:not-implemented t))
+(defmessage cfheaders-message (:not-implemented t))
+(defmessage getcfcheckpt-message (:not-implemented t))
+(defmessage cfcheckpt-message (:not-implemented t))
